@@ -132,3 +132,7 @@ dmypy.json
 *.nc
 *.pickle
 *.bz2
+*.png
+*.pdf
+*.csv
+*.txt
