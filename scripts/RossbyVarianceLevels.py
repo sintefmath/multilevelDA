@@ -86,17 +86,20 @@ ls = [6, 7, 8, 9, 10]
 # *So far only one random parameter but Matern field of wind intended.*
 
 # %%
-def wind_bump(data_args, sig = 1e+14):
-    dataShape = (data_args["ny"] + 4, data_args["nx"] + 4)
+def wind_bump(ny, nx, sig = None):
+    dataShape = (ny, nx )
     w = np.zeros(dataShape, dtype=np.float32, order='C')
 
-    x_center = data_args["dx"]*(data_args["nx"]+4)*0.5
-    y_center = data_args["dy"]*(data_args["ny"]+4)*0.5
+    x_center = 0.5*nx
+    y_center = 0.5*ny
 
-    for j in range(data_args["ny"] + 4):
-        for i in range(data_args["nx"] + 4):
-            x = data_args["dx"]*i - x_center
-            y = data_args["dy"]*j - y_center
+    if sig is None:
+        sig = nx**2/15
+
+    for j in range(ny):
+        for i in range(nx):
+            x = i - x_center
+            y = j - y_center
 
             d = x**2 + y**2
             
@@ -104,6 +107,7 @@ def wind_bump(data_args, sig = 1e+14):
     
     return w
 
+wind_weight = wind_bump(200,200)
 
 # %% [markdown]
 # ## Variance Level Plot
@@ -141,6 +145,26 @@ class WelfordsVariance():
             return (mean, variance, sampleVariance)
     
 
+# %% 
+class WelfordsVariance3():
+    def __init__(self, shape):
+        self.wv_eta = WelfordsVariance(shape)
+        self.wv_hu = WelfordsVariance(shape)
+        self.wv_hv = WelfordsVariance(shape)
+
+    def update(self, eta, hu, hv):
+        self.wv_eta.update(eta)
+        self.wv_hu.update(hu)
+        self.wv_hv.update(hv)
+
+    def finalize(self, m=1):
+        # m - values in [0, 1, 2]
+        # m = 0 : mean
+        # m = 1 : variance
+        # m = 2 : sample variance
+        return (self.wv_eta.finalize()[m], self.wv_hu.finalize()[m], self.wv_hv.finalize()[m])
+        
+
 # %%
 N_var = 1000
 
@@ -150,63 +174,53 @@ diff_vars = np.zeros((len(ls), 3))
 for l_idx, l in enumerate(ls):
     print("Level ", l_idx)
     data_args0 = initLevel(l)
-    wind_weight = wind_bump(data_args0)
-
     data_args1 = initLevel(l-1)
 
-    # Storage allocation
-    est_mean = np.zeros((3,data_args0["ny"],data_args0["nx"]))
-
-    samples0 = np.zeros((3,data_args0["ny"],data_args0["nx"],N_var)) 
-    samples1 = np.zeros((3,data_args1["ny"],data_args1["nx"],N_var)) 
+    welford_var = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
+    welford_diffvar = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
 
     for i in range(N_var):
         print("Sample ", i)
 
         # Perturbation sampling
+        t_splits = 251
+
         wind_degree = np.deg2rad(np.random.uniform(0,360))
-        wind_speed  = 10
-        data_args0["wind"] = WindStress.WindStress(t=[0], wind_u=[np.array(wind_weight*[[wind_speed*np.sin(wind_degree)]], dtype=np.float32)], wind_v=[np.array(wind_weight*[[wind_speed*np.cos(wind_degree)]], dtype=np.float32)])
+        wind_speed  = 7.5
+        
+        wind_u = (wind_speed*np.sin(wind_degree) + np.cumsum(0.1*np.random.normal(size=t_splits))[:,np.newaxis,np.newaxis]) * np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
+        wind_v = (wind_speed*np.cos(wind_degree) + np.cumsum(0.1*np.random.normal(size=t_splits))[:,np.newaxis,np.newaxis]) * np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
+
+        ts = np.linspace(0,250000,t_splits)
+
+        wind = WindStress.WindStress(t=ts, wind_u=wind_u.astype(np.float32), wind_v=wind_v.astype(np.float32))
 
         ## Fine sim
         gpu_ctx = Common.CUDAContext()
-        sim0 = CDKLM16.CDKLM16(gpu_ctx, **data_args0)
+        sim0 = CDKLM16.CDKLM16(gpu_ctx, **data_args0, wind=wind)
         sim0.step(250000)
 
-        eta, hu, hv = sim0.download(interior_domain_only=True)
-        samples0[0,:,:,i] = eta
-        samples0[1,:,:,i] = hu
-        samples0[2,:,:,i] = hv
+        eta0, hu0, hv0 = sim0.download(interior_domain_only=True)
+        welford_var.update(eta0, hu0, hv0)
 
         sim0.cleanUp()
         del gpu_ctx
 
         ## Coarse partner sim
-        data_args1["wind"] = WindStress.WindStress(t=[0], wind_u=[np.array(wind_weight*[[wind_speed*np.sin(wind_degree)]], dtype=np.float32)], wind_v=[np.array(wind_weight*[[wind_speed*np.cos(wind_degree)]], dtype=np.float32)])
-
         gpu_ctx = Common.CUDAContext()
-        sim1 = CDKLM16.CDKLM16(gpu_ctx, **data_args1)
+        sim1 = CDKLM16.CDKLM16(gpu_ctx, **data_args1, wind=wind)
         sim1.step(250000)
 
-        eta, hu, hv = sim1.download(interior_domain_only=True)
-        samples1[0,:,:,i] = eta
-        samples1[1,:,:,i] = hu
-        samples1[2,:,:,i] = hv
+        eta1, hu1, hv1 = sim1.download(interior_domain_only=True)
+        welford_diffvar.update(eta0 - eta1.repeat(2,0).repeat(2,1), hu0 - hu1.repeat(2,0).repeat(2,1), hv0 - hv1.repeat(2,0).repeat(2,1))
 
         sim1.cleanUp()
         del gpu_ctx
 
-    for e in range(3):
-        welford_var = WelfordsVariance(samples0[e,:,:,0].shape)
-        for s in range(samples0.shape[-1]):
-            welford_var.update(samples0[e,:,:,s])
-        vars[l_idx,e] = np.sqrt(np.average(welford_var.finalize()[1]**2))
+    vars[l_idx,:] = np.sqrt(np.average(np.array(welford_var.finalize())**2, axis=(1,2)))
 
-    for e in range(3):
-        welford_var = WelfordsVariance(samples0[e,:,:,0].shape)
-        for s in range(samples0.shape[-1]):
-            welford_var.update(samples0[e,:,:,s]-samples1[e,:,:,s].repeat(2,0).repeat(2,1))
-        diff_vars[l_idx,e] = np.sqrt(np.average(welford_var.finalize()[1]**2))
+    diff_vars[l_idx,:] = np.sqrt(np.average(np.array(welford_diffvar.finalize())**2, axis=(1,2)))
+
 
 # %%
 fig, axs = plt.subplots(1,3, figsize=(15,5))
