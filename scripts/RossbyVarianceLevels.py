@@ -107,7 +107,30 @@ def wind_bump(ny, nx, sig = None):
     
     return w
 
-wind_weight = wind_bump(200,200)
+wind_N = 100
+wind_weight = wind_bump(wind_N,wind_N)
+
+
+# %% 
+def KL_perturbations(t_splits, KL_N):
+    # Sampling random field based on Karhunen-Loeve expansions
+    
+    # t_splits (int) - number of how many KL-fields are generated
+
+    # Output: size=(t_splits, N, N) with t_splits-times a KL-field
+
+    KL_DECAY=1.05
+    KL_SCALING=0.15
+
+    KL_fields = np.zeros((t_splits,KL_N,KL_N))
+
+    rns = np.random.normal(size=(10,10,t_splits))
+
+    for n in range(1, rns.shape[1]+1):
+        for m in range(1, rns.shape[0]+1):
+            KL_fields += np.tile(KL_SCALING * m**(-KL_DECAY) * n**(-KL_DECAY) * np.outer(np.sin(m*np.pi*np.linspace(0,1,KL_N)), np.sin(n*np.pi*np.linspace(0,1,KL_N))), (t_splits,1,1)) * rns[m-1, n-1][:,np.newaxis,np.newaxis]
+
+    return KL_fields
 
 # %% [markdown]
 # ## Variance Level Plot
@@ -186,10 +209,19 @@ for l_idx, l in enumerate(ls):
         t_splits = 251
 
         wind_degree = np.deg2rad(np.random.uniform(0,360))
-        wind_speed  = 7.5
-        
-        wind_u = (wind_speed*np.sin(wind_degree) + np.cumsum(0.1*np.random.normal(size=t_splits))[:,np.newaxis,np.newaxis]) * np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
-        wind_v = (wind_speed*np.cos(wind_degree) + np.cumsum(0.1*np.random.normal(size=t_splits))[:,np.newaxis,np.newaxis]) * np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
+        wind_speed  = 5.0
+
+        init_wind_u = wind_speed * np.sin(wind_degree) * np.ones((wind_N,wind_N))
+        init_wind_v = wind_speed * np.cos(wind_degree) * np.ones((wind_N,wind_N))
+
+        KL_fields_u = KL_perturbations(t_splits, wind_N)
+        KL_fields_v = KL_perturbations(t_splits, wind_N)
+
+        wind_u = np.repeat(init_wind_u[np.newaxis,:,:], t_splits, axis=0) + np.cumsum(KL_fields_u, axis=0)
+        wind_v = np.repeat(init_wind_v[np.newaxis,:,:], t_splits, axis=0) + np.cumsum(KL_fields_v, axis=0)
+
+        wind_u = wind_u *np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
+        wind_v = wind_v *np.repeat(wind_weight[np.newaxis,:,:], t_splits, axis=0)
 
         ts = np.linspace(0,250000,t_splits)
 
