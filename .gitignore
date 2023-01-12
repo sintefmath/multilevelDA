@@ -140,3 +140,4 @@ dmypy.json
 # dump
 **/old/
 **/backups/
+*.npy
