@@ -12,9 +12,10 @@ import numpy as np
 #For plotting
 import matplotlib
 from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-plt.rcParams["image.origin"] = "lower"
+# %%
+import datetime
+timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -253,6 +254,11 @@ for l_idx, l in enumerate(ls):
 
     diff_vars[l_idx,:] = np.sqrt(np.average(np.array(welford_diffvar.finalize())**2, axis=(1,2)))
 
+# %%
+
+np.save("Rossby-vars-"+timestamp, vars)
+np.save("Rossby-diff_vars-"+timestamp, diff_vars)
+
 
 # %%
 fig, axs = plt.subplots(1,3, figsize=(15,5))
@@ -275,4 +281,4 @@ axs[0].set_title("eta")
 axs[1].set_title("hu")
 axs[2].set_title("hv")
 
-plt.savefig("RossbyVarianceLevels.png")
+plt.savefig("RossbyVarianceLevels-"+timestamp+".png")
