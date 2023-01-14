@@ -8,6 +8,7 @@
 
 #Import packages we need
 import numpy as np
+import sys, os
 
 #For plotting
 import matplotlib
@@ -24,6 +25,10 @@ timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 from gpuocean.utils import Common, WindStress
 from gpuocean.SWEsimulators import CDKLM16
 
+# %% 
+sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+from utils.RossbyInit import *
+
 # %%
 gpu_ctx = Common.CUDAContext()
 
@@ -31,51 +36,6 @@ gpu_ctx = Common.CUDAContext()
 # ## Setting-up case with different resolutions
 # 
 # IC are the bump from the Rossby adjustment case
-
-# %%
-def initBump(data_args, dataShape, d_shift=1e6,D=0.5*1e6):
-
-    eta0  = np.zeros(dataShape, dtype=np.float32, order='C')
-    hu0   = np.zeros(dataShape, dtype=np.float32, order='C')
-    hv0   = np.zeros(dataShape, dtype=np.float32, order='C')
-
-    x_center = data_args["dx"]*(data_args["nx"]+4)*0.5
-    y_center = data_args["dy"]*(data_args["ny"]+4)*0.5
-
-    scale = 1e9
-    for j in range(data_args["ny"] + 4):
-        for i in range(data_args["nx"] + 4):
-            x = data_args["dx"]*i - x_center
-            y = data_args["dy"]*j - y_center
-
-            d = np.sqrt(x**2 + y**2)
-            
-            eta0[j, i] += 0.1*(1.0+np.tanh(-(d-d_shift)/D))
-
-    return eta0, hu0, hv0
-
-# %%
-def initLevel(l):
-    data_args = {}
-    data_args["nx"] = 2**l
-    data_args["ny"] = 2**l 
-    dataShape = (data_args["ny"] + 4, data_args["nx"] + 4)
-
-    data_args["dx"] = 2**(19-l)*100
-    data_args["dy"] = 2**(19-l)*100
-
-    data_args["dt"] = 0.0
-    data_args["g"] = 9.81
-    data_args["f"] = 1.2e-4
-    data_args["r"] = 0.0
-    # data_args["boundary_conditions"] = Common.BoundaryConditions(1,1,1,1)
-
-    data_args["eta0"], data_args["hu0"], data_args["hv0"] = initBump(data_args, dataShape)
-    
-    H0 = 1000.0
-    data_args["H"] = np.ma.array(np.ones((dataShape[0]+1, dataShape[1]+1), dtype=np.float32, order='C')*H0, mask=False)
-
-    return data_args
 
 # %%
 ls = [6, 7, 8, 9, 10]
@@ -197,8 +157,8 @@ diff_vars = np.zeros((len(ls), 3))
 
 for l_idx, l in enumerate(ls):
     print("Level ", l_idx)
-    data_args0 = initLevel(l)
-    data_args1 = initLevel(l-1)
+    data_args0 = initLevel(l, ls[-1])
+    data_args1 = initLevel(l-1, ls[-1])
 
     welford_var = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
     welford_diffvar = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
