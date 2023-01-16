@@ -1,2 +1,2 @@
-# realisticDA
-Notebooks for data assimilation on realistic cases based on `metno/gpuocean`
+# multilevelDA
+Notebooks for multilevel data assimilation based on `metno/gpuocean`
