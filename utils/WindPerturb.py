@@ -20,23 +20,24 @@ class KarhunenLoeve_Sampler():
         self.t_splits = t_splits
         self.N        = N
 
-        self.KL_ref_fields = []
+        self.KL_ref_fields = np.zeros((self.KL_bases_N, self.KL_bases_N, self.N, self.N))
+
         for n in range(1, self.KL_bases_N+1):
-            self.KL_ref_fields.append([])
             for m in range(1, self.KL_bases_N+1):
-                self.KL_ref_fields[n-1].append( np.tile(self.KL_SCALING * m**(-self.KL_DECAY) * n**(-self.KL_DECAY) * np.outer(np.sin(m*np.pi*np.linspace(0,1,self.N)), np.sin(n*np.pi*np.linspace(0,1,self.N))), (t_splits,1,1)) )
+                self.KL_ref_fields[n-1, m-1, :, :] = self.KL_SCALING * m**(-self.KL_DECAY) * n**(-self.KL_DECAY) * np.outer(np.sin(m*np.pi*np.linspace(0,1,self.N)), np.sin(n*np.pi*np.linspace(0,1,self.N))) 
+        
+        self.KL_ref_fields = np.reshape(self.KL_ref_fields, (self.KL_bases_N * self.KL_bases_N, self.N, self.N))
 
 
     def perturbations(self):
         """ Output: size=(t_splits, N, N) with t_splits-times a KL-field """
 
-        KL_fields = np.zeros((self.t_splits,self.N,self.N))
+        KL_fields = np.zeros((self.t_splits, self.N, self.N))
 
-        rns = np.random.normal(size=(self.KL_bases_N,self.KL_bases_N,self.t_splits))
-
-        for n in range(self.KL_bases_N):
-            for m in range(self.KL_bases_N):
-                KL_fields +=  self.KL_ref_fields[m][n] * rns[m, n][:,np.newaxis,np.newaxis]
+        rns = np.random.normal(size=(self.KL_bases_N * self.KL_bases_N,self.t_splits))
+        
+        for t in range(self.t_splits):
+            KL_fields[t,:,:] = np.sum(self.KL_ref_fields*rns[:,t][:,np.newaxis, np.newaxis], axis=0)
 
         return KL_fields
 
@@ -78,7 +79,7 @@ def wind_sample(KLSampler, wind_weight=None, wind_speed=5.0):
     wind_v = np.repeat(init_wind_v[np.newaxis,:,:], KLSampler.t_splits, axis=0) + np.cumsum(KL_fields_v, axis=0)
 
     if wind_weight is None:
-        wind_weight = wind_bump(KLSampler.N,KLSampler.N)
+        wind_weight = wind_bump(KLSampler.N, KLSampler.N)
 
     wind_u = wind_u *np.repeat(wind_weight[np.newaxis,:,:], KLSampler.t_splits, axis=0)
     wind_v = wind_v *np.repeat(wind_weight[np.newaxis,:,:], KLSampler.t_splits, axis=0)
