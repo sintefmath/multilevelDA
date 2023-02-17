@@ -1,14 +1,14 @@
-import threading
-import time
-import psutil
+# import threading
+# import time
+# import psutil
 
-def printmemorytofile():
-    while True:
-        with open("memory.txt", "a") as f:
-            f.write(f"{ psutil.virtual_memory()[2]} {psutil.virtual_memory()[3]/1000000000}\n")
-        time.sleep(1)
-printthread = threading.Thread(target=printmemorytofile)
-printthread.start()
+# def printmemorytofile():
+#     while True:
+#         with open("memory.txt", "a") as f:
+#             f.write(f"{ psutil.virtual_memory()[2]} {psutil.virtual_memory()[3]/1000000000}\n")
+#         time.sleep(1)
+# printthread = threading.Thread(target=printmemorytofile)
+# printthread.start()
 # %% [markdown]
 # # Multi Level Simulation
 
@@ -45,12 +45,15 @@ gpu_ctx = Common.CUDAContext()
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-log_f = open('log_'+timestamp+'.txt', 'w')
-log_f.write('Staring ML-DA simulation'+'\n')
+if not os.path.exists("DAoutput"):
+    os.makedirs("DAoutput")
+log_f = open('DAoutput/log_'+timestamp+'.txt', 'w')
 
 def log2file(file, string):
     file.write(string)
     print(string)
+
+log2file(log_f, timestamp + ': Staring ML-DA simulation'+'\n')
 
 # %% [markdown]
 # Rossby utils
@@ -108,7 +111,7 @@ def imshow3var(est_var):
 
 # %%
 ls = [6, 7, 8, 9, 10]
-T = 0#250000
+T = 250000
 
 # %% [markdown]
 # ### Truth
@@ -140,7 +143,7 @@ axs[1].legend(labelcolor="black", fontsize=15)
 axs[2].scatter(Hx, Hy, marker="x", c="black", label=str(round(obs[2],5)), s=100)
 axs[2].legend(labelcolor="black", fontsize=15)
 fig.suptitle("Truth", y=0.85)
-plt.savefig("Truth"+timestamp+".png")
+plt.savefig("DAoutput/Truth"+timestamp+".png")
 
 
 # %% [markdown]
@@ -219,7 +222,7 @@ def MLinit(Nes):
     lvl_ensemble = []
     data_args = initLevel(ls[0])
     for e in range(Nes[0]):
-        log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level 0, memeber " + str(e) +"\n")
+        # log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level 0, memeber " + str(e) +"\n")
         wind = wind_sample(KLSampler, T, wind_weight=wind_weight)
         lvl_ensemble.append(CDKLM16.CDKLM16(gpu_ctx, **data_args, wind=wind))
 
@@ -234,7 +237,7 @@ def MLinit(Nes):
         data_args1 = initLevel(ls[l_idx-1])
         
         for e in range(Nes[l_idx]):
-            log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level "+str(l_idx)+", memeber " + str(e) +"\n")
+            # log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level "+str(l_idx)+", memeber " + str(e) +"\n")
             wind = wind_sample(KLSampler, T, wind_weight=wind_weight)
             
             lvl_ensemble0.append(CDKLM16.CDKLM16(gpu_ctx, **data_args0, wind=wind))
@@ -249,12 +252,12 @@ ML_ensemble = MLinit(Nes)
 log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Starting ensemble simulation"+"\n")
 
 for e in range(Nes[0]):
-    log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level 0, memeber " + str(e) +"\n")
+    # log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level 0, memeber " + str(e) +"\n")
     ML_ensemble[0][e].step(T)
     
 for l_idx in range(1,len(Nes)):
     for e in range(Nes[l_idx]):
-        log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level "+str(l_idx)+", memeber " + str(e) +"\n")
+        # log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + "Level "+str(l_idx)+", memeber " + str(e) +"\n")
         ML_ensemble[l_idx][0][e].step(T)
         ML_ensemble[l_idx][1][e].step(T)
 
@@ -285,8 +288,6 @@ def MLdownload(ML_ensemble):
 
 ML_state = MLdownload(ML_ensemble)
 
-print(sys.getsizeof(ML_state))
-
 # %%
 ML_prior_state = copy.deepcopy(ML_state)
 
@@ -314,11 +315,11 @@ def MLvar(state):
 # %%
 MLest_mean = MLmean(ML_prior_state)
 fig, axs = imshow3(MLest_mean)
-plt.savefig("MLprior_mean"+timestamp+".png")
+plt.savefig("DAoutput/MLprior_mean"+timestamp+".png")
 
 MLest_var = MLvar(ML_prior_state)
 fig, axs = imshow3var(MLest_var)
-plt.savefig("MLprior_var"+timestamp+".png")
+plt.savefig("DAoutput/MLprior_var"+timestamp+".png")
 
 # %%
 from skimage.measure import block_reduce
@@ -428,18 +429,18 @@ def ML_EnKF(ML_state, Hx, Hy, obs, r = 2.5*1e7, relax_factor = 1.0):
     return ML_state
 
 # %%
-log2file(log_f, "Starting MLDA: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f,  datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + ":Starting MLDA" +"\n")
 ML_posterior_state = ML_EnKF(ML_prior_state, Hx, Hy, obs)
-log2file(log_f, "Finished MLDA: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f,  datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + ":Finished MLDA" +"\n")
 
 # %%
 MLest_mean = MLmean(ML_posterior_state)
 fig, axs = imshow3(MLest_mean)
-plt.savefig("MLposterior_mean"+timestamp+".png")
+plt.savefig("DAoutput/MLposterior_mean"+timestamp+".png")
 
 MLest_var = MLvar(ML_posterior_state)
 fig, axs = imshow3var(MLest_var)
-plt.savefig("MLposterior_var"+timestamp+".png")
+plt.savefig("DAoutput/MLposterior_var"+timestamp+".png")
 
 
 # %% [markdown]
@@ -451,7 +452,7 @@ log2file(log_f, "Ensemble size of singlelevel"+"\n")
 log2file(log_f, str(SL_Ne)+"\n")
 
 # %%
-log2file(log_f, "Starting ensemble init: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f,  datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + ": Starting ensemble init" +"\n")
 SL_ensemble = []
 
 data_args = initLevel(ls[-1])
@@ -461,7 +462,7 @@ for e in range(SL_Ne):
 
 
 # %%
-log2file(log_f, "Starting ensemble simulation: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + ": Starting ensemble simulation" +"\n")
 
 for e in range(SL_Ne):
     SL_ensemble[e].step(T)
@@ -479,10 +480,10 @@ SL_prior = copy.deepcopy(SL_state)
 
 # %%
 fig, axs = imshow3(np.average(SL_prior, axis=-1))
-plt.savefig("SLprior_mean"+timestamp+".png")
+plt.savefig("DAoutput/SLprior_mean"+timestamp+".png")
 
 fig, axs = imshow3var(np.var(SL_prior, axis=-1))
-plt.savefig("SLprior_var"+timestamp+".png")
+plt.savefig("DAoutput/SLprior_var"+timestamp+".png")
 
 # %%
 def SL_EnKF(SL_state, Hx, Hy, obs, r = 2.5*1e7):
@@ -531,16 +532,16 @@ def SL_EnKF(SL_state, Hx, Hy, obs, r = 2.5*1e7):
     
 
 # %%
-log2file(log_f, "Starting SLDA: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+ ": Starting SLDA" +"\n")
 SL_posterior = SL_EnKF(SL_prior, Hx, Hy, obs)
-log2file(log_f, "Finished SLDA: " + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+"\n")
+log2file(log_f, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")+ ": Finished SLDA" +"\n")
 
 # %%
 fig, axs = imshow3(np.average(SL_posterior, axis=-1))
-plt.savefig("SL_posterior_mean"+timestamp+".png")
+plt.savefig("DAoutput/SL_posterior_mean"+timestamp+".png")
 
 fig, axs = imshow3var(np.var(SL_posterior, axis=-1))
-plt.savefig("SL_posterior_var"+timestamp+".png")
+plt.savefig("DAoutput/SL_posterior_var"+timestamp+".png")
 
 # %% 
 log_f.close()
