@@ -8,8 +8,8 @@ def initGridSpecs(l):
     data_args["nx"] = 2**l
     data_args["ny"] = 2**(l+1) 
 
-    data_args["dx"] = 2**(19-l)*100
-    data_args["dy"] = 2**(19-l)*100
+    data_args["dx"] = 2**(18-l)*100
+    data_args["dy"] = 2**(18-l)*100
 
     return data_args
 
@@ -24,16 +24,19 @@ def initBump(l, l_max, d_shift=1e6,D=0.5*1e6):
     eta0  = np.zeros((ny,nx), dtype=np.float32, order='C')
     x_center = dx*nx*0.5
     y_center = dy*ny*0.5
-
-    for j in range(ny):
-        for i in range(nx):
+    
+    xm = nx//2
+    ym = ny//2
+    xit_start = nx//8
+    yit_start = ny//16
+    for j in range(ym-yit_start, ym+yit_start):
+        for i in range(xm-xit_start, xm+xit_start):
             x = dx*i - x_center
             y = dy*j - y_center
-
             d = np.sqrt(x**2 + y**2)
             
             eta0[j, i] += 0.1*(1.0+np.tanh(-(d-d_shift)/D))
-
+    
     eta0 = block_reduce(eta0, block_size=(2**(l_max-l),2**(l_max-l)), func=np.nanmean)
     eta0 = np.pad(eta0, ((2,2),(2,2)))
 
