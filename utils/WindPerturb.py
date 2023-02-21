@@ -13,7 +13,7 @@ class KarhunenLoeve_Sampler():
         """
 
         self.KL_DECAY=1.05
-        self.KL_SCALING=0.15
+        self.KL_SCALING=0.33
 
         self.KL_bases_N = 10
 
@@ -64,7 +64,7 @@ def wind_bump(ny, nx, sig = None):
     return w
 
 
-def wind_sample(KLSampler, wind_weight=None, wind_speed=5.0):
+def wind_sample(KLSampler, T=125000, wind_weight=None, wind_speed=5.0):
     ## KL perturbed wind fields (much faster!)
         
     wind_degree = np.deg2rad(np.random.uniform(0,360))
@@ -84,6 +84,6 @@ def wind_sample(KLSampler, wind_weight=None, wind_speed=5.0):
     wind_u = wind_u *np.repeat(wind_weight[np.newaxis,:,:], KLSampler.t_splits, axis=0)
     wind_v = wind_v *np.repeat(wind_weight[np.newaxis,:,:], KLSampler.t_splits, axis=0)
 
-    ts = np.linspace(0,250000,KLSampler.t_splits)
+    ts = np.linspace(0,T,KLSampler.t_splits)
 
     return WindStress.WindStress(t=ts, wind_u=wind_u.astype(np.float32), wind_v=wind_v.astype(np.float32))
