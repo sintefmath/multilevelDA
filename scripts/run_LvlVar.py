@@ -18,6 +18,12 @@ from matplotlib import pyplot as plt
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+if not os.path.exists("OutputVarianceLevels"):
+    os.makedirs("OutputVarianceLevels")
+
+output_path = "OutputVarianceLevels/"+timestamp
+os.makedirs(output_path)
+
 # %% [markdown]
 # GPU Ocean-modules:
 
@@ -41,9 +47,8 @@ gpu_ctx = Common.CUDAContext()
 # %%
 ls = [6, 7, 8, 9, 10]
 
-
 wind_N = 100
-t_splits = 251
+t_splits = 26
 
 KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N)
 wind_weight = wind_bump(KLSampler.N,KLSampler.N)
@@ -105,6 +110,9 @@ class WelfordsVariance3():
         
 
 # %%
+T = 125000
+
+# %%
 N_var = 1000
 
 vars = np.zeros((len(ls), 3))
@@ -122,12 +130,12 @@ for l_idx, l in enumerate(ls):
         print("Sample ", i)
 
         # Perturbation sampling
-        wind = wind_sample(KLSampler, wind_weight=wind_weight)
+        wind = wind_sample(KLSampler, wind_weight=wind_weight, wind_speed=0.0)
 
         ## Fine sim
         gpu_ctx = Common.CUDAContext()
         sim0 = CDKLM16.CDKLM16(gpu_ctx, **data_args0, wind=wind)
-        sim0.step(250000)
+        sim0.step(T)
 
         eta0, hu0, hv0 = sim0.download(interior_domain_only=True)
         welford_var.update(eta0, hu0, hv0)
@@ -138,7 +146,7 @@ for l_idx, l in enumerate(ls):
         ## Coarse partner sim
         gpu_ctx = Common.CUDAContext()
         sim1 = CDKLM16.CDKLM16(gpu_ctx, **data_args1, wind=wind)
-        sim1.step(250000)
+        sim1.step(T)
 
         eta1, hu1, hv1 = sim1.download(interior_domain_only=True)
         welford_diffvar.update(eta0 - eta1.repeat(2,0).repeat(2,1), hu0 - hu1.repeat(2,0).repeat(2,1), hv0 - hv1.repeat(2,0).repeat(2,1))
@@ -152,8 +160,8 @@ for l_idx, l in enumerate(ls):
 
 # %%
 
-np.save("Rossby-vars-"+timestamp, vars)
-np.save("Rossby-diff_vars-"+timestamp, diff_vars)
+np.save(output_path+"/Rossby-vars", vars)
+np.save(output_path+"/Rossby-diff_vars", diff_vars)
 
 
 # %%
@@ -177,4 +185,4 @@ axs[0].set_title("eta")
 axs[1].set_title("hu")
 axs[2].set_title("hv")
 
-plt.savefig("RossbyVarianceLevels-"+timestamp+".png")
+plt.savefig(output_path+"/RossbyVarianceLevels.png")
