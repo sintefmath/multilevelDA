@@ -6,14 +6,14 @@ from gpuocean.utils import WindStress
 class KarhunenLoeve_Sampler():
     """ Sampling random field based on Karhunen-Loeve expansions """
     
-    def __init__(self, t_splits, N):
+    def __init__(self, t_splits, N, decay=1.05, scaling=0.33):
         """
         t_splits (int) - number of how many KL-fields are generated
         KL_N (int)     - spatial resolution of KL-fields
         """
 
-        self.KL_DECAY=1.05
-        self.KL_SCALING=0.33
+        self.KL_DECAY    = decay
+        self.KL_SCALING  = scaling
 
         self.KL_bases_N = 10
 

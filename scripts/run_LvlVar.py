@@ -21,7 +21,7 @@ timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 if not os.path.exists("OutputVarianceLevels"):
     os.makedirs("OutputVarianceLevels")
 
-output_path = "OutputVarianceLevels/"+timestamp
+output_path = "OutputVarianceLevels/"+timestamp+"_Rossby"
 os.makedirs(output_path)
 
 # %% [markdown]
@@ -50,7 +50,7 @@ ls = [6, 7, 8, 9, 10]
 wind_N = 100
 t_splits = 26
 
-KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N)
+KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.15, scaling=0.9)
 wind_weight = wind_bump(KLSampler.N,KLSampler.N)
 
 # %% [markdown]
@@ -127,10 +127,10 @@ for l_idx, l in enumerate(ls):
     welford_diffvar = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
 
     for i in range(N_var):
-        print("Sample ", i)
+        print("Level ", l_idx, ", Sample ", i)
 
         # Perturbation sampling
-        wind = wind_sample(KLSampler, wind_weight=wind_weight, wind_speed=0.0)
+        wind = wind_sample(KLSampler, T=T, wind_weight=wind_weight, wind_speed=0.0)
 
         ## Fine sim
         gpu_ctx = Common.CUDAContext()
@@ -160,8 +160,8 @@ for l_idx, l in enumerate(ls):
 
 # %%
 
-np.save(output_path+"/Rossby-vars", vars)
-np.save(output_path+"/Rossby-diff_vars", diff_vars)
+np.save(output_path+"/vars", vars)
+np.save(output_path+"/diff_vars", diff_vars)
 
 
 # %%

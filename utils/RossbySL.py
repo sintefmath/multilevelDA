@@ -9,12 +9,12 @@ from gpuocean.SWEsimulators import CDKLM16
 # This script mostly consists of duplicates 
 # But for convenience in the Rossby example all functionalities are collected here
 
-def initSLensemble(gpu_ctx, ls, Ne, KLSampler, wind_weight, wind_T):
+def initSLensemble(gpu_ctx, ls, Ne, KLSampler, wind_weight, wind_T, wind_speed):
     SL_ensemble = []
 
     data_args = initLevel(ls[-1])
     for e in range(Ne):
-        wind = wind_sample(KLSampler, wind_T, wind_weight=wind_weight)
+        wind = wind_sample(KLSampler, wind_T, wind_weight=wind_weight, wind_speed=wind_speed)
         SL_ensemble.append(CDKLM16.CDKLM16(gpu_ctx, **data_args, wind=wind))
 
     return SL_ensemble
