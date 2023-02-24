@@ -65,7 +65,7 @@ wind_N = 100
 t_splits = 26
 
 # %%
-KLSampler = KarhunenLoeve_Sampler(t_splits + 3, wind_N)
+KLSampler = KarhunenLoeve_Sampler(t_splits + 3, wind_N, decay=1.15, scaling=0.9)
 wind_weight = wind_bump(KLSampler.N,KLSampler.N)
 
 # %% [markdown]
@@ -119,8 +119,8 @@ T = 125000
 # ### Variance-level analysis
 
 # %%
-vars_file = "../scripts/OutputVarianceLevels/Rossby-vars-no_wind_dir.npy"
-diff_vars_file = "../scripts/OutputVarianceLevels/Rossby-diff_vars-no_wind_dir.npy"
+vars_file = "../scripts/OutputVarianceLevels/NEWFILE"
+diff_vars_file = "../scripts/OutputVarianceLevels/NEWFILE"
 
 # %%
 rossbyAnalysis = RossbyAnalysis(ls, vars_file, diff_vars_file)
@@ -135,7 +135,7 @@ SL_Ne = np.int32(np.ceil(rossbyAnalysis.work(ML_Nes)/rossbyAnalysis._level_work(
 # %%
 def generate_truth():
     data_args = initLevel(ls[-1])
-    true_wind = wind_sample(KLSampler, T + 30000, wind_weight=wind_weight)
+    true_wind = wind_sample(KLSampler, T + 15000, wind_weight=wind_weight, wind_speed=0.0)
     truth = CDKLM16.CDKLM16(gpu_ctx, **data_args, wind=true_wind)
     truth.step(T)
 
@@ -226,14 +226,14 @@ for r in range(rank_N):
 
     truth = generate_truth()
     obs = generate_obs_from_truth(truth, Hy, Hx, R)
-    truth.step(25000)
+    truth.step(12500)
 
-    ML_ensemble = initMLensemble(gpu_ctx, ls, ML_Nes, KLSampler, wind_weight, T + 30000)
+    ML_ensemble = initMLensemble(gpu_ctx, ls, ML_Nes, KLSampler, wind_weight, T + 15000, 0.0)
     MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
     MLOceanEnsemble.step(T)
     MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
     MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0)
-    MLOceanEnsemble.step(25000)
+    MLOceanEnsemble.step(12500)
     ML_final_state = MLOceanEnsemble.download()
 
     for f in range(len(rank_idxs)):
@@ -250,10 +250,10 @@ for f in range(len(rank_idxs)):
 for r in range(rank_N):
     print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S") + ': SLrun ' + str(r) +'\n')
     
-    SL_ensemble = initSLensemble(gpu_ctx, ls, SL_Ne, KLSampler, wind_weight, T + 30000)
+    SL_ensemble = initSLensemble(gpu_ctx, ls, SL_Ne, KLSampler, wind_weight, T + 15000, 0.0)
     SLstep(SL_ensemble, T)
     SL_posterior = SLEnKF(SL_ensemble, obs, Hx, Hy, R)
-    SLstep(SL_ensemble, 25000)
+    SLstep(SL_ensemble, 12500)
     SL_final_state = SLdownload(SL_ensemble)
 
     for f in range(len(rank_idxs)):
