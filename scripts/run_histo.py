@@ -11,8 +11,8 @@ import sys
 #Import packages we need
 import numpy as np
 import datetime
-from IPython.display import display
 import copy
+import gc
 
 #For plotting
 import matplotlib
@@ -34,14 +34,10 @@ gpu_ctx = Common.CUDAContext()
 # %%
 # %% 
 import datetime
-timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
+print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S") + ": Starting ML experiment")
 
-if not os.path.exists("OutputHisto"):
-    os.makedirs("OutputHisto")
-
-output_path = "OutputHisto/"+timestamp
-os.makedirs(output_path)
-
+output_path = "OutputHisto/bash_loop"
+os.makedirs(output_path, exist_ok=True)
 
 # %% [markdown]
 # Rossby utils
@@ -113,19 +109,20 @@ def imshow3var(est_var):
 # %%
 ls = [6, 7, 8, 9, 10]
 T = 125000
-
+T_forecast = 12500
 
 # %% [markdown]
 # ### Variance-level analysis
 
-# %%
-vars_file = "../scripts/OutputVarianceLevels/NEWFILE"
-diff_vars_file = "../scripts/OutputVarianceLevels/NEWFILE"
+# %% 
+vars_file = "/home/florianb/havvarsel/multilevelDA/scripts/OutputVarianceLevels/2023-02-24T16_29_26_Rossby/vars.npy"
+diff_vars_file = "/home/florianb/havvarsel/multilevelDA/scripts/OutputVarianceLevels/2023-02-24T16_29_26_Rossby/diff_vars.npy"
 
 # %%
 rossbyAnalysis = RossbyAnalysis(ls, vars_file, diff_vars_file)
-ML_Nes = rossbyAnalysis.optimal_Ne(tau=1.5*1e-7)
-
+ML_Nes = rossbyAnalysis.optimal_Ne(tau=3.0*1e-7)
+#print(ML_Nes)
+#ML_Nes = [500,10,5,3,2]
 # %%
 SL_Ne = np.int32(np.ceil(rossbyAnalysis.work(ML_Nes)/rossbyAnalysis._level_work(ls[-1])))
 
@@ -219,44 +216,56 @@ for f in range(len(rank_idxs)):
     MLrank_files.append(output_path+"/MLranks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
 
 # %%
-rank_N = 2
+# -> the actuval loop
+truth = generate_truth()
+truth.step(T)
+obs = generate_obs_from_truth(truth, Hy, Hx, R)
+truth.step(T_forecast)
 
-for r in range(rank_N):
-    print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S") + ': MLrun ' + str(r) +'\n')
 
-    truth = generate_truth()
-    obs = generate_obs_from_truth(truth, Hy, Hx, R)
-    truth.step(12500)
 
-    ML_ensemble = initMLensemble(gpu_ctx, ls, ML_Nes, KLSampler, wind_weight, T + 15000, 0.0)
-    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
-    MLOceanEnsemble.step(T)
-    MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
-    MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0)
-    MLOceanEnsemble.step(12500)
-    ML_final_state = MLOceanEnsemble.download()
+ML_ensemble = initMLensemble(gpu_ctx, ls, ML_Nes, KLSampler, wind_weight, T + T_forecast, 0.0)
+MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
 
-    for f in range(len(rank_idxs)):
-        with open(MLrank_files[f], "a") as file:
-            file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, ML_final_state))) + "\n")
-            file.close()
-    
+MLOceanEnsemble.step(T)
+
+MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
+MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0)
+
+MLOceanEnsemble.step(T_forecast)
+ML_final_state = MLOceanEnsemble.download()
+
+
+
+for f in range(len(rank_idxs)):
+    with open(MLrank_files[f], "a") as file:
+        file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, ML_final_state))) + "\n")
+        file.close()
+
+
 # %%
 
-SLrank_files = []
-for f in range(len(rank_idxs)):
-    SLrank_files.append(output_path+"/SLranks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
+ 
 
-for r in range(rank_N):
-    print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S") + ': SLrun ' + str(r) +'\n')
+# SLrank_files = []
+# for f in range(len(rank_idxs)):
+#     SLrank_files.append(output_path+"/SLranks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
+
+# for r in range(rank_N):
+#     print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S") + ': SLrun ' + str(r) +'\n')
+
+#     truth = generate_truth()
+#     truth.step(T)
+#     obs = generate_obs_from_truth(truth, Hy, Hx, R)
+#     truth.step(12500)
     
-    SL_ensemble = initSLensemble(gpu_ctx, ls, SL_Ne, KLSampler, wind_weight, T + 15000, 0.0)
-    SLstep(SL_ensemble, T)
-    SL_posterior = SLEnKF(SL_ensemble, obs, Hx, Hy, R)
-    SLstep(SL_ensemble, 12500)
-    SL_final_state = SLdownload(SL_ensemble)
+#     SL_ensemble = initSLensemble(gpu_ctx, ls, SL_Ne, KLSampler, wind_weight, T + 15000, 0.0)
+#     SLstep(SL_ensemble, T)
+#     SL_posterior = SLEnKF(SL_ensemble, obs, Hx, Hy, R)
+#     SLstep(SL_ensemble, 12500)
+#     SL_final_state = SLdownload(SL_ensemble)
 
-    for f in range(len(rank_idxs)):
-        with open(SLrank_files[f], "a") as file:
-            file.write(",".join(map(str, SLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], SL_ensemble, SL_final_state)))+"\n")
-            file.close()
+#     for f in range(len(rank_idxs)):
+#         with open(SLrank_files[f], "a") as file:
+#             file.write(",".join(map(str, SLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], SL_ensemble, SL_final_state)))+"\n")
+#             file.close()

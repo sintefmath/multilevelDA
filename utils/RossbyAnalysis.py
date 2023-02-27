@@ -58,12 +58,20 @@ class RossbyAnalysis:
 
     @staticmethod
     def _level_work(l):
-        # Cubic work in terms of grid discretisation
-        return (2**(19-l)*100)**(-3)
+        """
+        Cubic work in terms of grid discretisation
+
+        The dx should be in synv with `RossbyInit.py`
+        """
+        return (2**(18-l)*100)**(-3)
 
 
     def optimal_Ne(self, tau):
-        # See Ch. 5 of Kjetils thesis for reference 
+        """
+        Evaluating the optimal ML ensemble size for a error level `tau`
+
+        See Ch. 5 of Kjetils thesis for reference 
+        """
 
         rel_vars = self.vars/self.vars[-1]
         rel_diff_vars = self.diff_vars/self.vars[-1]
@@ -90,7 +98,11 @@ class RossbyAnalysis:
 
     
     def work(self, Nes):
+        """
+        Evaluating the theoretical error for an ML ensemble
+        work(0 and + ensemble members) + work(- ensemble members)
+        """
         assert len(Nes) == len(self.ls), "Wrong number of levels"
-        return np.sum([RossbyAnalysis._level_work(l) for l in self.ls] * np.array(Nes))
+        return np.sum([RossbyAnalysis._level_work(l) for l in self.ls] * np.array(Nes)) + np.sum([RossbyAnalysis._level_work(l) for l in self.ls[:-1]] * np.array(Nes[1:]))
     
     
