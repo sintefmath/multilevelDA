@@ -132,9 +132,8 @@ SL_Ne = np.int32(np.ceil(rossbyAnalysis.work(ML_Nes)/rossbyAnalysis._level_work(
 # %%
 def generate_truth():
     data_args = initLevel(ls[-1])
-    true_wind = wind_sample(KLSampler, T + 15000, wind_weight=wind_weight, wind_speed=0.0)
+    true_wind = wind_sample(KLSampler, T + T_forecast, wind_weight=wind_weight, wind_speed=0.0)
     truth = CDKLM16.CDKLM16(gpu_ctx, **data_args, wind=true_wind)
-    truth.step(T)
 
     return truth
 
@@ -157,42 +156,40 @@ R = [0.0001, 0.01, 0.01]
 # #### Rank utils
 
 # %%
-def MLcdf4true(truth, Hx, Hy, ML_ensemble, ML_final_state):
+def MLcdf4true(truth, Hx, Hy, MLOceanEnsemble):
 
-    Nes = np.zeros(len(ML_ensemble))
-    Nes[0] = len(ML_ensemble[0])
-    for l_idx in range(1,len(ML_ensemble)):
-        Nes[l_idx] = len(ML_ensemble[l_idx][0])
+    ML_state = MLOceanEnsemble.download()
 
     true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
     true_values = np.array([true_eta[Hy, Hx], true_hu[Hy, Hx], true_hv[Hy, Hx]])
 
-    Xs = np.linspace(0, ML_ensemble[-1][0][0].nx * ML_ensemble[-1][0][0].dx, ML_ensemble[-1][0][0].nx)
-    Ys = np.linspace(0, ML_ensemble[-1][0][0].ny * ML_ensemble[-1][0][0].dy, ML_ensemble[-1][0][0].ny)
+
+    Xs = np.linspace(0, MLOceanEnsemble.nxs[-1] * MLOceanEnsemble.dxs[-1], MLOceanEnsemble.nxs[-1])
+    Ys = np.linspace(0, MLOceanEnsemble.nys[-1] * MLOceanEnsemble.dys[-1], MLOceanEnsemble.nys[-1])
     X, Y = np.meshgrid(Xs, Ys)
 
-    lvl_Xs = np.linspace(0, ML_ensemble[0][0].nx * ML_ensemble[0][0].dx, ML_ensemble[0][0].nx)
-    lvl_Ys = np.linspace(0, ML_ensemble[0][0].ny * ML_ensemble[0][0].dy, ML_ensemble[0][0].ny)
+    lvl_Xs = np.linspace(0, MLOceanEnsemble.nxs[0] * MLOceanEnsemble.dxs[0], MLOceanEnsemble.nxs[0])
+    lvl_Ys = np.linspace(0, MLOceanEnsemble.nys[0] * MLOceanEnsemble.dys[0], MLOceanEnsemble.nys[0])
     lvl_X, lvl_Y = np.meshgrid(lvl_Xs, lvl_Ys)
 
-    obs_idxs = np.unravel_index(np.argmin((lvl_X - X[0,Hx])**2 + (lvl_Y - Y[Hy,0])**2), ML_final_state[0][0].shape[:-1])
+    obs_idxs = np.unravel_index(np.argmin((lvl_X - X[0,Hx])**2 + (lvl_Y - Y[Hy,0])**2), ML_state[0][0].shape[:-1])
 
-    ML_Fy = 1/Nes[0] * np.sum(ML_final_state[0][:,obs_idxs[0],obs_idxs[1],:] < true_values[:,np.newaxis], axis=1)
+    ML_Fy = 1/MLOceanEnsemble.Nes[0] * np.sum(ML_state[0][:,obs_idxs[0],obs_idxs[1],:] < true_values[:,np.newaxis], axis=1)
 
-    for l_idx in range(1,len(ls)):
-        l = ls[l_idx]
+    for l_idx in range(1,MLOceanEnsemble.numLevels):
 
-        lvl_Xs0 = np.linspace(0, ML_ensemble[l_idx][0][0].nx * ML_ensemble[l_idx][0][0].dx, ML_ensemble[l_idx][0][0].nx)
-        lvl_Ys0 = np.linspace(0, ML_ensemble[l_idx][0][0].ny * ML_ensemble[l_idx][0][0].dy, ML_ensemble[l_idx][0][0].ny)
+        lvl_Xs0 = np.linspace(0, MLOceanEnsemble.nxs[l_idx] * MLOceanEnsemble.dxs[l_idx], MLOceanEnsemble.nxs[l_idx])
+        lvl_Ys0 = np.linspace(0, MLOceanEnsemble.nys[l_idx] * MLOceanEnsemble.dys[l_idx], MLOceanEnsemble.nys[l_idx])
         lvl_X0, lvl_Y0 = np.meshgrid(lvl_Xs0, lvl_Ys0)
-        obs_idxs0 = np.unravel_index(np.argmin((lvl_X0 - X[0,Hx])**2 + (lvl_Y0 - Y[Hy,0])**2), ML_final_state[l_idx][0][0].shape[:-1])
+        obs_idxs0 = np.unravel_index(np.argmin((lvl_X0 - X[0,Hx])**2 + (lvl_Y0 - Y[Hy,0])**2), ML_state[l_idx][0][0].shape[:-1])
 
-        lvl_Xs1 = np.linspace(0, ML_ensemble[l_idx][1][0].nx * ML_ensemble[l_idx][1][0].dx, ML_ensemble[l_idx][1][0].nx)
-        lvl_Ys1 = np.linspace(0, ML_ensemble[l_idx][1][0].ny * ML_ensemble[l_idx][1][0].dy, ML_ensemble[l_idx][1][0].ny)
+        lvl_Xs1 = np.linspace(0, MLOceanEnsemble.nxs[l_idx-1] * MLOceanEnsemble.dxs[l_idx-1], MLOceanEnsemble.nxs[l_idx-1])
+        lvl_Ys1 = np.linspace(0, MLOceanEnsemble.nys[l_idx-1] * MLOceanEnsemble.dys[l_idx-1], MLOceanEnsemble.nys[l_idx-1])
         lvl_X1, lvl_Y1 = np.meshgrid(lvl_Xs1, lvl_Ys1)
-        obs_idxs1 = np.unravel_index(np.argmin((lvl_X1 - X[0,Hx])**2 + (lvl_Y1 - Y[Hy,0])**2), ML_final_state[l_idx][1][0].shape[:-1])
+        obs_idxs1 = np.unravel_index(np.argmin((lvl_X1 - X[0,Hx])**2 + (lvl_Y1 - Y[Hy,0])**2), ML_state[l_idx][1][0].shape[:-1])
 
-        ML_Fy += 1/Nes[l_idx] * np.sum(1 * (ML_final_state[l_idx][0][:,obs_idxs0[0],obs_idxs0[1],:] < true_values[:,np.newaxis]) - 1 * (ML_final_state[l_idx][1][:,obs_idxs1[0],obs_idxs1[1],:] < true_values[:,np.newaxis]), axis=1)
+        ML_Fy += 1/MLOceanEnsemble.Nes[l_idx] * ( np.sum(1 * (ML_state[l_idx][0][:,obs_idxs0[0],obs_idxs0[1],:] < true_values[:,np.newaxis]), axis=1) 
+                                                - np.sum(1 * (ML_state[l_idx][1][:,obs_idxs1[0],obs_idxs1[1],:] < true_values[:,np.newaxis]), axis=1) )
     
     return ML_Fy
 
@@ -211,9 +208,17 @@ def SLcdf4true(truth, Hx, Hy, SL_ensemble, SL_final_state):
 # %%
 rank_idxs = [[Hx,Hy], [850, 650], [750,650], [750, 550], [850, 550]]
 
-MLrank_files = []
+MLrank_files_prior = []
 for f in range(len(rank_idxs)):
-    MLrank_files.append(output_path+"/MLranks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
+    MLrank_files_prior.append(output_path+"/MLpriorRanks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
+
+MLrank_files_poster = []
+for f in range(len(rank_idxs)):
+    MLrank_files_poster.append(output_path+"/MLposterRanks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
+
+MLrank_files_forec = []
+for f in range(len(rank_idxs)):
+    MLrank_files_forec.append(output_path+"/MLforeRanks_"+str(rank_idxs[f][0])+"_"+str(rank_idxs[f][1]))
 
 # %%
 # -> the actuval loop
@@ -229,23 +234,28 @@ MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
 
 MLOceanEnsemble.step(T)
 
+for f in range(len(rank_idxs)):
+    with open(MLrank_files_prior[f], "a") as file:
+        file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, MLOceanEnsemble.download()))) + "\n")
+        file.close()
+
 MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
 MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0)
 
+for f in range(len(rank_idxs)):
+    with open(MLrank_files_poster[f], "a") as file:
+        file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, MLOceanEnsemble.download()))) + "\n")
+        file.close()
+
 MLOceanEnsemble.step(T_forecast)
-ML_final_state = MLOceanEnsemble.download()
-
-
 
 for f in range(len(rank_idxs)):
-    with open(MLrank_files[f], "a") as file:
-        file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, ML_final_state))) + "\n")
+    with open(MLrank_files_forec[f], "a") as file:
+        file.write(",".join(map(str, MLcdf4true(truth, rank_idxs[f][0], rank_idxs[f][1], ML_ensemble, MLOceanEnsemble.download()))) + "\n")
         file.close()
 
 
 # %%
-
- 
 
 # SLrank_files = []
 # for f in range(len(rank_idxs)):
