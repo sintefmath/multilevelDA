@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 
 # %%
 import datetime
-timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
 if not os.path.exists("OutputVarianceLevels"):
     os.makedirs("OutputVarianceLevels")
@@ -50,7 +50,8 @@ ls = [6, 7, 8, 9, 10]
 wind_N = 100
 t_splits = 26
 
-KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.15, scaling=0.9)
+# KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.15, scaling=0.9)
+KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.15, scaling=3)
 wind_weight = wind_bump(KLSampler.N,KLSampler.N)
 
 # %% [markdown]
@@ -113,7 +114,7 @@ class WelfordsVariance3():
 T = 125000
 
 # %%
-N_var = 1000
+N_var = 25
 
 vars = np.zeros((len(ls), 3))
 diff_vars = np.zeros((len(ls), 3))
