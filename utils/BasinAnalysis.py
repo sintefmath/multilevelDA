@@ -4,11 +4,11 @@ from matplotlib import pyplot as plt
 
 from skimage.measure import block_reduce
 
-class RossbyAnalysis:
+class Analysis:
 
     def __init__(self, ls, vars_file, diff_vars_file):
         """
-        ls: list of level exponenents (see `RossbyInit.py`)
+        ls: list of level exponenents (see `BasinInit.py`)
         vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         diff_vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         """
@@ -61,9 +61,10 @@ class RossbyAnalysis:
         """
         Cubic work in terms of grid discretisation
 
-        The dx should be in synv with `RossbyInit.py`
+        The dx should be in synv with `BasinInit.py`
         """
-        return (2**(18-l)*100)**(-3)
+        dx = 2**(18-l)*100
+        return dx**(-3)
 
 
     def optimal_Ne(self, tau):
@@ -83,9 +84,9 @@ class RossbyAnalysis:
         allwork = 0
         for l_idx, l in enumerate(self.ls):
             if l_idx == 0: 
-                allwork += np.sqrt(avg_vars[l_idx] * RossbyAnalysis._level_work(l))
+                allwork += np.sqrt(avg_vars[l_idx] * Analysis._level_work(l))
             else:
-                allwork += np.sqrt(avg_diff_vars[l_idx] * RossbyAnalysis._level_work(l))
+                allwork += np.sqrt(avg_diff_vars[l_idx] * Analysis._level_work(l))
 
         optNe_ref = np.zeros(len(self.ls))
         for l_idx, l in enumerate(self.ls):
@@ -103,6 +104,6 @@ class RossbyAnalysis:
         work(0 and + ensemble members) + work(- ensemble members)
         """
         assert len(Nes) == len(self.ls), "Wrong number of levels"
-        return np.sum([RossbyAnalysis._level_work(l) for l in self.ls] * np.array(Nes)) + np.sum([RossbyAnalysis._level_work(l) for l in self.ls[:-1]] * np.array(Nes[1:]))
+        return np.sum([Analysis._level_work(l) for l in self.ls] * np.array(Nes)) + np.sum([Analysis._level_work(l) for l in self.ls[:-1]] * np.array(Nes[1:]))
     
     

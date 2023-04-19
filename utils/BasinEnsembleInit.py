@@ -1,4 +1,4 @@
-from utils.RossbyInit import *
+from utils.BasinInit import *
 from utils.WindPerturb import *
 
 from gpuocean.SWEsimulators import CDKLM16

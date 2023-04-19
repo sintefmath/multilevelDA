@@ -16,7 +16,13 @@ from matplotlib import pyplot as plt
 
 # %%
 import datetime
-timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
+
+output_path = "VarianceLevels/Basin/"+timestamp 
+os.makedirs(output_path)
+
+log = open(output_path+"/log.txt", 'w')
+log.write("Parameters for the experimental set-up\n\n")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -27,93 +33,12 @@ from gpuocean.SWEsimulators import CDKLM16
 
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+from utils.BasinInit import *
 from utils.WindPerturb import *
 
 # %%
 gpu_ctx = Common.CUDAContext()
 
-# %% [markdown]
-# ## Setting-up case with different resolutions
-# 
-# IC are the bump from the Rossby adjustment case
-
-# %%
-ls = [6, 7, 8, 9, 10]
-
-
-wind_N = 100
-t_splits = 251
-
-KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N)
-wind_weight = wind_bump(KLSampler.N,KLSampler.N)
-
-# %% 
-
-import numpy as np
-import copy
-
-from skimage.measure import block_reduce
-
-def initGridSpecs(l):
-    data_args = {}
-    data_args["nx"] = 2**l
-    data_args["ny"] = 2**(l+1) 
-
-    data_args["dx"] = 2**(18-l)*100
-    data_args["dy"] = 2**(18-l)*100
-
-    return data_args
-
-
-def initBump(l, l_max, d_shift=1e6,D=0.5*1e6):
-
-    data_args_max = initGridSpecs(l_max)
-    nx, ny = data_args_max["nx"], data_args_max["ny"]
-
-    dx, dy = data_args_max["dx"], data_args_max["dy"]
-
-    eta0  = np.zeros((ny,nx), dtype=np.float32, order='C')
-    x_center = dx*nx*0.5
-    y_center = dy*ny*0.5
-
-    for j in range(ny):
-        for i in range(nx):
-            x = dx*i - x_center
-            y = dy*j - y_center
-
-            d = np.sqrt(x**2 + y**2)
-            
-            eta0[j, i] += 0.1*(1.0+np.tanh(-(d-d_shift)/D))
-
-    eta0 = block_reduce(eta0, block_size=(2**(l_max-l),2**(l_max-l)), func=np.nanmean)
-    eta0 = np.pad(eta0, ((2,2),(2,2)))
-
-    hu0 = np.zeros_like(eta0, dtype=np.float32)
-
-    hv0 = np.zeros_like(eta0, dtype=np.float32)
-
-    return eta0, hu0, hv0
-
-
-def initLevel(l, l_max=None):
-    if l_max is None:
-        l_max = l 
-
-    data_args = initGridSpecs(l)
-    dataShape = (data_args["ny"] + 4, data_args["nx"] + 4)
-
-    data_args["dt"] = 0.0
-    data_args["g"] = 9.81
-    data_args["f"] = 1.2e-4
-    data_args["r"] = 0.0
-    # data_args["boundary_conditions"] = Common.BoundaryConditions(1,1,1,1)
-
-    data_args["eta0"], data_args["hu0"], data_args["hv0"] = initBump(l, l_max)
-    
-    H0 = 1000.0
-    data_args["H"] = np.ma.array(np.ones((dataShape[0]+1, dataShape[1]+1), dtype=np.float32, order='C')*H0, mask=False)
-
-    return data_args
 
 # %% [markdown]
 # ## Variance Level Plot
@@ -169,11 +94,46 @@ class WelfordsVariance3():
         # m = 1 : variance
         # m = 2 : sample variance
         return (self.wv_eta.finalize()[m], self.wv_hu.finalize()[m], self.wv_hv.finalize()[m])
-        
+
+    
+# %% [markdown]
+# ## Setting-up case with different resolutions
+# 
+# IC are the bump from the Rossby adjustment case
 
 # %%
-N_var = 1000
+ls = [6, 7, 8, 9, 10]
 
+wind_N = 100
+t_splits = 26
+
+KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.5, scaling=0.5)
+wind_weight = wind_bump(KLSampler.N,KLSampler.N)
+
+
+# %%
+N_var = 100
+T = 12500
+
+# %%
+# Book keeping
+log.write("levels = " + ", ".join([str(l) for l in ls])+"\n\n")
+
+data_args = initGridSpecs(ls[-1])
+log.write("nx = " + str(data_args["nx"]) + ", ny = " + str(data_args["ny"])+"\n")
+log.write("dx = " + str(data_args["dx"]) + ", dy = " + str(data_args["dy"])+"\n")
+log.write("T = " + str(T) +"\n\n")
+
+log.write("Perturbation\n")
+log.write("KL bases: " + str(KLSampler.KL_bases_N) + "\n")
+log.write("KL decay: " + str(KLSampler.KL_DECAY) +"\n")
+log.write("KL scaling: " + str(KLSampler.KL_SCALING) + "\n")
+log.write("t splits:" +str(t_splits) +"\n\n")
+
+log.write("Statistics\n")
+log.write("N = " + str(N_var) + "\n")
+
+# %%
 vars = np.zeros((len(ls), 3))
 diff_vars = np.zeros((len(ls), 3))
 
@@ -189,12 +149,12 @@ for l_idx, l in enumerate(ls):
         print("Sample ", i)
 
         # Perturbation sampling
-        wind = wind_sample(KLSampler, wind_weight=wind_weight)
+        wind = wind_sample(KLSampler, T=T, wind_weight=wind_weight, wind_speed=0.0)
 
         ## Fine sim
         gpu_ctx = Common.CUDAContext()
         sim0 = CDKLM16.CDKLM16(gpu_ctx, **data_args0, wind=wind)
-        sim0.step(125000)
+        sim0.step(T)
 
         eta0, hu0, hv0 = sim0.download(interior_domain_only=True)
         welford_var.update(eta0, hu0, hv0)
@@ -205,7 +165,7 @@ for l_idx, l in enumerate(ls):
         ## Coarse partner sim
         gpu_ctx = Common.CUDAContext()
         sim1 = CDKLM16.CDKLM16(gpu_ctx, **data_args1, wind=wind)
-        sim1.step(125000)
+        sim1.step(T)
 
         eta1, hu1, hv1 = sim1.download(interior_domain_only=True)
         welford_diffvar.update(eta0 - eta1.repeat(2,0).repeat(2,1), hu0 - hu1.repeat(2,0).repeat(2,1), hv0 - hv1.repeat(2,0).repeat(2,1))
@@ -217,10 +177,10 @@ for l_idx, l in enumerate(ls):
 
     diff_vars[l_idx,:] = np.sqrt(np.average(np.array(welford_diffvar.finalize())**2, axis=(1,2)))
 
-# %%
 
-np.save("Rossby-vars-"+timestamp, vars)
-np.save("Rossby-diff_vars-"+timestamp, diff_vars)
+# %%
+np.save(output_path+"/vars", vars)
+np.save(output_path+"/diff_vars", diff_vars)
 
 
 # %%
@@ -244,4 +204,4 @@ axs[0].set_title("eta")
 axs[1].set_title("hu")
 axs[2].set_title("hv")
 
-plt.savefig("RossbyVarianceLevels-"+timestamp+".png")
+plt.savefig(output_path+"/VarianceLevelPlot.pdf", bbox_inches="tight")
