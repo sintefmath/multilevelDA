@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 
 # %%
 import datetime
-timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -44,7 +44,7 @@ ls = [6, 7, 8, 9, 10]
 wind_N = 100
 t_splits = 26
 
-KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.25, scaling=0.75)
+KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.25, scaling=1.0)
 wind_weight = wind_bump(KLSampler.N,KLSampler.N)
 
 # %% 
@@ -221,9 +221,11 @@ for l_idx, l in enumerate(ls):
 
 
 # %%
+os.makedirs("OutputVarianceLevels", exist_ok=True)
+os.makedirs("OutputVarianceLevels/"+timestamp+"_Rossby", exist_ok=True)
 
-np.save("Rossby-vars-"+timestamp, vars)
-np.save("Rossby-diff_vars-"+timestamp, diff_vars)
+np.save("OutputVarianceLevels/"+timestamp+"_Rossby/vars", vars)
+np.save("OutputVarianceLevels/"+timestamp+"_Rossby/diff_vars", diff_vars)
 
 
 # %%
@@ -247,4 +249,4 @@ axs[0].set_title("eta")
 axs[1].set_title("hu")
 axs[2].set_title("hv")
 
-plt.savefig("RossbyVarianceLevels-"+timestamp+".png")
+plt.savefig("OutputVarianceLevels/"+timestamp+"_Rossby/VarianceLevelPlot.pdf")
