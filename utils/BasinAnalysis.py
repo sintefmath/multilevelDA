@@ -6,17 +6,27 @@ from skimage.measure import block_reduce
 
 class Analysis:
 
-    def __init__(self, ls, vars_file, diff_vars_file):
+    def __init__(self, ls, vars, diff_vars):
         """
         ls: list of level exponenents (see `BasinInit.py`)
         vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         diff_vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         """
         self.ls = ls
-        self.vars = np.load(vars_file)
-        self.diff_vars = np.load(diff_vars_file)
+        
+        self.vars = vars
+        if isinstance(vars, str):
+            self.vars = np.load(vars)
+        
+        self.diff_vars = diff_vars
+        if isinstance(diff_vars, str):
+            self.diff_vars = np.load(diff_vars)
+
+        if len(self.diff_vars) == len(self.ls):
+            self.diff_vars = self.diff_vars[1:]
+
         assert len(self.ls) == len(self.vars), "Wrong number of levels"
-        assert len(self.ls) == len(self.diff_vars), "Wrong number of levels"
+        assert len(self.ls) == len(self.diff_vars) + 1, "Wrong number of levels"
 
 
     def plotLvlVar(self, relative=False):
@@ -38,7 +48,7 @@ class Analysis:
             Nxs = (2**np.array(self.ls))*(2**(np.array(self.ls)+1))
             for i in range(3):
                 axs[i].loglog(Nxs, vars[:,i], label="$|| Var[u^l] ||_{L^2}$", linewidth=3)
-                axs[i].loglog(Nxs[1:], diff_vars[1:,i], label="$|| Var[u^l-u^{l-1}] ||_{L^2}$", linewidth=3)
+                axs[i].loglog(Nxs[1:], diff_vars[:,i], label="$|| Var[u^l-u^{l-1}] ||_{L^2}$", linewidth=3)
                 axs[i].set_xlabel("# grid cells", fontsize=15)
                 # axs[i].set_ylabel("variance", fontsize=15)
                 axs[i].legend(labelcolor="black", loc=(0.2,0.5), fontsize=15)
@@ -63,6 +73,7 @@ class Analysis:
 
         The dx should be in synv with `BasinInit.py`
         """
+        print("Check the right cell size here!")
         dx = 2**(18-l)*100
         return dx**(-3)
 
@@ -86,14 +97,14 @@ class Analysis:
             if l_idx == 0: 
                 allwork += np.sqrt(avg_vars[l_idx] * Analysis._level_work(l))
             else:
-                allwork += np.sqrt(avg_diff_vars[l_idx] * Analysis._level_work(l))
+                allwork += np.sqrt(avg_diff_vars[l_idx-1] * Analysis._level_work(l))
 
         optNe_ref = np.zeros(len(self.ls))
         for l_idx, l in enumerate(self.ls):
             if l_idx == 0: 
                 optNe_ref[l_idx] = np.sqrt(avg_vars[l_idx]/((2**l)**2)) * allwork
             else: 
-                optNe_ref[l_idx] = np.sqrt(avg_diff_vars[l_idx]/((2**l)**2)) * allwork
+                optNe_ref[l_idx] = np.sqrt(avg_diff_vars[l_idx-1]/((2**l)**2)) * allwork
 
         return np.int32(np.ceil(1/(tau**2)*optNe_ref))
 
