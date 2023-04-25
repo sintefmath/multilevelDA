@@ -6,7 +6,7 @@ from skimage.measure import block_reduce
 
 class Analysis:
 
-    def __init__(self, ls, vars, diff_vars):
+    def __init__(self, ls, vars, diff_vars, data_args_list):
         """
         ls: list of level exponenents (see `BasinInit.py`)
         vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
@@ -28,6 +28,13 @@ class Analysis:
         assert len(self.ls) == len(self.vars), "Wrong number of levels"
         assert len(self.ls) == len(self.diff_vars) + 1, "Wrong number of levels"
 
+        self.dxs = [data_args["dx"] for data_args in data_args_list]
+        self.dys = [data_args["dy"] for data_args in data_args_list]
+
+        self.nxs = [data_args["nx"] for data_args in data_args_list]
+        self.nys = [data_args["ny"] for data_args in data_args_list]
+
+
 
     def plotLvlVar(self, relative=False):
 
@@ -45,7 +52,7 @@ class Analysis:
                         'ytick.color':'black'}):
             fig, axs = plt.subplots(1,3, figsize=(15,5))
 
-            Nxs = (2**np.array(self.ls))*(2**(np.array(self.ls)+1))
+            Nxs = [nx*ny for nx, ny in zip(self.nxs, self.nys)]
             for i in range(3):
                 axs[i].loglog(Nxs, vars[:,i], label="$|| Var[u^l] ||_{L^2}$", linewidth=3)
                 axs[i].loglog(Nxs[1:], diff_vars[:,i], label="$|| Var[u^l-u^{l-1}] ||_{L^2}$", linewidth=3)
@@ -66,15 +73,13 @@ class Analysis:
 
 
 
-    @staticmethod
-    def _level_work(l):
+    def _level_work(self, l):
         """
         Cubic work in terms of grid discretisation
 
         The dx should be in synv with `BasinInit.py`
         """
-        print("Check the right cell size here!")
-        dx = 2**(18-l)*100
+        dx = 1/2*(self.dxs[-1] + self.dys[-1])
         return dx**(-3)
 
 
@@ -95,9 +100,9 @@ class Analysis:
         allwork = 0
         for l_idx, l in enumerate(self.ls):
             if l_idx == 0: 
-                allwork += np.sqrt(avg_vars[l_idx] * Analysis._level_work(l))
+                allwork += np.sqrt(avg_vars[l_idx] * self._level_work(l))
             else:
-                allwork += np.sqrt(avg_diff_vars[l_idx-1] * Analysis._level_work(l))
+                allwork += np.sqrt(avg_diff_vars[l_idx-1] * self._level_work(l))
 
         optNe_ref = np.zeros(len(self.ls))
         for l_idx, l in enumerate(self.ls):
@@ -115,6 +120,6 @@ class Analysis:
         work(0 and + ensemble members) + work(- ensemble members)
         """
         assert len(Nes) == len(self.ls), "Wrong number of levels"
-        return np.sum([Analysis._level_work(l) for l in self.ls] * np.array(Nes)) + np.sum([Analysis._level_work(l) for l in self.ls[:-1]] * np.array(Nes[1:]))
-    
+        return np.sum([self._level_work(l) for l in self.ls] * np.array(Nes)) + np.sum([self._level_work(l) for l in self.ls[:-1]] * np.array(Nes[1:]))
+
     
