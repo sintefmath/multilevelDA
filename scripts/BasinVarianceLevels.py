@@ -1,5 +1,5 @@
 # %% [markdown]
-# # Multi Resolution Simulation
+# # Multi Level Analysis
 
 # %% [markdown]
 # ### Classes and modules
@@ -13,6 +13,8 @@ import sys, os
 #For plotting
 import matplotlib
 from matplotlib import pyplot as plt
+
+import pycuda.driver as cuda
 
 # %%
 import datetime
@@ -28,92 +30,121 @@ log.write("Parameters for the experimental set-up\n\n")
 # GPU Ocean-modules:
 
 # %%
-from gpuocean.utils import Common, WindStress
-from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common
+from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.BasinInit import *
-from utils.WindPerturb import *
-
 # %%
 gpu_ctx = Common.CUDAContext()
-
-
-# %% [markdown]
-# ## Variance Level Plot
-
-class WelfordsVariance():
-    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
-
-    def __init__(self, shape):
-        self.existingAggregate = (0, np.zeros(shape), np.zeros(shape))
-
-
-    def update(self, newValue):
-        # For a new value newValue, compute the new count, new mean, the new M2.
-        # mean accumulates the mean of the entire dataset
-        # M2 aggregates the squared distance from the mean
-        # count aggregates the number of samples seen so far
-        (count, mean, M2) = self.existingAggregate
-        
-        count += 1
-        delta = newValue - mean
-        mean += delta / count
-        delta2 = newValue - mean
-        M2 += delta * delta2
-        
-        self.existingAggregate = (count, mean, M2)
-
-
-    def finalize(self):
-        # Retrieve the mean, variance and sample variance from an aggregate
-        (count, mean, M2) = self.existingAggregate
-        if count < 2:
-            return float("nan")
-        else:
-            (mean, variance, sampleVariance) = (mean, M2 / count, M2 / (count - 1))
-            return (mean, variance, sampleVariance)
-    
-
-# %% 
-class WelfordsVariance3():
-    def __init__(self, shape):
-        self.wv_eta = WelfordsVariance(shape)
-        self.wv_hu = WelfordsVariance(shape)
-        self.wv_hv = WelfordsVariance(shape)
-
-    def update(self, eta, hu, hv):
-        self.wv_eta.update(eta)
-        self.wv_hu.update(hu)
-        self.wv_hv.update(hv)
-
-    def finalize(self, m=1):
-        # m - values in [0, 1, 2]
-        # m = 0 : mean
-        # m = 1 : variance
-        # m = 2 : sample variance
-        return (self.wv_eta.finalize()[m], self.wv_hu.finalize()[m], self.wv_hv.finalize()[m])
+gpu_stream = cuda.Stream()
 
     
 # %% [markdown]
 # ## Setting-up case with different resolutions
-# 
-# IC are the bump from the Rossby adjustment case
 
 # %%
 ls = [6, 7, 8, 9, 10]
 
-wind_N = 100
-t_splits = 26
-
-KLSampler = KarhunenLoeve_Sampler(t_splits, wind_N, decay=1.5, scaling=0.5)
-wind_weight = wind_bump(KLSampler.N,KLSampler.N)
+# %% 
+sample_args = {
+    "g": 9.81,
+    "f": 0.0012,
+    }
 
 
 # %%
-N_var = 100
-T = 12500
+model_error_args_list = []
+
+for l in ls:
+    lvl_grid_args = initGridSpecs(l)
+    model_error_args_list.append( {
+        "nx": lvl_grid_args["nx"],
+        "ny": lvl_grid_args["ny"],
+        "dx": lvl_grid_args["dx"],
+        "dy": lvl_grid_args["dy"],
+        "gpu_ctx": gpu_ctx,
+        "gpu_stream": gpu_stream,
+        "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+        } )
+
+
+# %% 
+init_model_error_basis_args = {
+    "basis_x_start": 1, 
+    "basis_x_end": 6,
+    "basis_y_start": 2,
+    "basis_y_end": 7,
+
+    "kl_decay": 1.25,
+    "kl_scaling": 0.005,
+}
+
+# %% 
+init_mekls = []
+for l_idx in range(len(ls)): 
+    init_mekls.append( ModelErrorKL.ModelErrorKL(**model_error_args_list[l_idx], **init_model_error_basis_args) 
+                )
+
+# %% 
+sim_model_error_basis_args = {
+    "basis_x_start": 2, 
+    "basis_x_end": 7,
+    "basis_y_start": 3,
+    "basis_y_end": 8,
+
+    "kl_decay": 1.25,
+    "kl_scaling": 0.0005,
+}
+
+# %% 
+sim_mekls = []
+for l_idx in range(len(ls)): 
+    sim_mekls.append( ModelErrorKL.ModelErrorKL(**model_error_args_list[l_idx], **sim_model_error_basis_args) 
+                )
+
+# %% [markdown]
+## Set-up statisitcs
+
+# %% 
+from utils.VarianceStatistics import * 
+
+# %% 
+welford_vars = []
+welford_diff_vars = []
+for l_idx, l in enumerate(ls):
+    welford_vars.append( WelfordsVariance3((init_mekls[l_idx].ny, init_mekls[l_idx].nx)) )
+    if l_idx > 0:
+        welford_diff_vars.append( WelfordsVariance3((init_mekls[l_idx].ny, init_mekls[l_idx].nx)) )
+
+# %% 
+Ts = [0, 15*60, 3600, 6*3600, 12*3600]
+
+# %% 
+welford_vars_Ts = []
+welford_diff_vars_Ts = [] 
+for T in Ts:
+    welford_vars_Ts.append( copy.deepcopy(welford_vars))
+    welford_diff_vars_Ts.append( copy.deepcopy(welford_diff_vars))
+
+# %% 
+# Flags for model error
+import argparse
+parser = argparse.ArgumentParser(description='Generate an ensemble.')
+parser.add_argument('--N', type=int, default=100)
+parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
+parser.add_argument('--sim_error', type=int, default=0,choices=[0,1])
+parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
+
+
+args = parser.parse_args()
+
+init_model_error = bool(args.init_error)
+sim_model_error = bool(args.sim_error)
+sim_model_error_timestep = args.sim_error_timestep
+
+N_var = args.N
 
 # %%
 # Book keeping
@@ -122,86 +153,83 @@ log.write("levels = " + ", ".join([str(l) for l in ls])+"\n\n")
 data_args = initGridSpecs(ls[-1])
 log.write("nx = " + str(data_args["nx"]) + ", ny = " + str(data_args["ny"])+"\n")
 log.write("dx = " + str(data_args["dx"]) + ", dy = " + str(data_args["dy"])+"\n")
-log.write("T = " + str(T) +"\n\n")
+log.write("T = " + ", ".join([str(T) for T in Ts]) +"\n\n")
 
-log.write("Perturbation\n")
-log.write("KL bases: " + str(KLSampler.KL_bases_N) + "\n")
-log.write("KL decay: " + str(KLSampler.KL_DECAY) +"\n")
-log.write("KL scaling: " + str(KLSampler.KL_SCALING) + "\n")
-log.write("t splits:" +str(t_splits) +"\n\n")
+log.write("Init State\n")
+log.write("Lake-at-rest\n\n")
+
+log.write("Init Perturbation\n")
+if init_model_error:
+    log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
+    log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
+    log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
+    log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
+    log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
+    log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
+else: 
+    log.write("False\n\n")
+
+log.write("Temporal Perturbation\n")
+if sim_model_error:
+    log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
+    log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
+    log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
+    log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
+    log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
+    log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
+    log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
+else:
+    log.write("False\n\n")
 
 log.write("Statistics\n")
 log.write("N = " + str(N_var) + "\n")
 
-# %%
-vars = np.zeros((len(ls), 3))
-diff_vars = np.zeros((len(ls), 3))
-
-for l_idx, l in enumerate(ls):
-    print("Level ", l_idx)
-    data_args0 = initLevel(l, ls[-1])
-    data_args1 = initLevel(l-1, ls[-1])
-
-    welford_var = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
-    welford_diffvar = WelfordsVariance3((data_args0["ny"],data_args0["nx"]))
-
-    for i in range(N_var):
-        print("Sample ", i)
-
-        # Perturbation sampling
-        wind = wind_sample(KLSampler, T=T, wind_weight=wind_weight, wind_speed=0.0)
-
-        ## Fine sim
-        gpu_ctx = Common.CUDAContext()
-        sim0 = CDKLM16.CDKLM16(gpu_ctx, **data_args0, wind=wind)
-        sim0.step(T)
-
-        eta0, hu0, hv0 = sim0.download(interior_domain_only=True)
-        welford_var.update(eta0, hu0, hv0)
-
-        sim0.cleanUp()
-        del gpu_ctx
-
-        ## Coarse partner sim
-        gpu_ctx = Common.CUDAContext()
-        sim1 = CDKLM16.CDKLM16(gpu_ctx, **data_args1, wind=wind)
-        sim1.step(T)
-
-        eta1, hu1, hv1 = sim1.download(interior_domain_only=True)
-        welford_diffvar.update(eta0 - eta1.repeat(2,0).repeat(2,1), hu0 - hu1.repeat(2,0).repeat(2,1), hv0 - hv1.repeat(2,0).repeat(2,1))
-
-        sim1.cleanUp()
-        del gpu_ctx
-
-    vars[l_idx,:] = np.sqrt(np.average(np.array(welford_var.finalize())**2, axis=(1,2)))
-
-    diff_vars[l_idx,:] = np.sqrt(np.average(np.array(welford_diffvar.finalize())**2, axis=(1,2)))
-
+log.close()
 
 # %%
-np.save(output_path+"/vars", vars)
-np.save(output_path+"/diff_vars", diff_vars)
+for l_idx in range(len(ls)):  # loop over levels
+    for i in range(N_var): # loop over samples
+        print(l_idx, i)
+        ## INIT SIM
+        data_args = make_init_fields(model_error_args_list[l_idx])
+        sim = make_sim(model_error_args_list[l_idx], data_args)
+        if init_model_error:
+            init_mekls[l_idx].perturbSim(sim)
 
+        if l_idx > 0:
+            coarse_data_args = make_init_fields(model_error_args_list[l_idx-1])
+            coarse_sim = make_sim(model_error_args_list[l_idx-1], coarse_data_args)
+            if init_model_error:
+                init_mekls[l_idx-1].perturbSimSimilarAs(coarse_sim, modelError=init_mekls[l_idx])
 
-# %%
-fig, axs = plt.subplots(1,3, figsize=(15,5))
+        ## EVOLVE SIMS
+        for t_idx, T in enumerate(Ts): 
+            while sim.t < T:
+                t_step = np.minimum(sim_model_error_timestep, T-sim.t)
+                sim.step(t_step)
+                if sim_model_error:
+                    sim_mekls[l_idx].perturbSim(sim)
 
-Nxs = (2**np.array(ls))**2
-for i in range(3):
-    axs[i].loglog(Nxs, vars[:,i], label="$|| Var[u^l] ||_{L^2}$")
-    axs[i].loglog(Nxs[1:], diff_vars[1:,i], label="$|| Var[u^l-u^{l-1}] ||_{L^2}$")
-    axs[i].set_xlabel("# grid cells")
-    axs[i].set_ylabel("variance")
-    axs[i].legend(labelcolor="black")
+                if l_idx > 0:
+                    coarse_sim.step(t_step)
+                    if sim_model_error:
+                        sim_mekls[l_idx-1].perturbSimSimilarAs(coarse_sim, modelError=sim_mekls[l_idx])
 
-    axs[i].set_xticks(Nxs)
-    axs[i].xaxis.grid(True)
+            eta, hu, hv = sim.download(interior_domain_only=True)
+            welford_vars_Ts[t_idx][l_idx].update(eta, hu, hv)
 
-    for l_idx, l in enumerate(ls):
-        axs[i].annotate(str(l), (Nxs[l_idx], 1e-5), color="black")
+            if l_idx > 0:
+                coarse_eta, coarse_hu, coarse_hv = coarse_sim.download(interior_domain_only=True)
+                welford_diff_vars_Ts[t_idx][l_idx-1].update(eta - coarse_eta.repeat(2,0).repeat(2,1), 
+                                                hu - coarse_hu.repeat(2,0).repeat(2,1), 
+                                                hv - coarse_hv.repeat(2,0).repeat(2,1))
 
-axs[0].set_title("eta")
-axs[1].set_title("hu")
-axs[2].set_title("hv")
-
-plt.savefig(output_path+"/VarianceLevelPlot.pdf", bbox_inches="tight")
+# %% 
+for t_idx, T in enumerate(Ts):
+    vars = np.array([np.sqrt(np.average(np.array(wv.finalize())**2, axis=(1,2))) for wv in welford_vars_Ts[t_idx]])
+    diff_vars = np.array([np.sqrt(np.average(np.array(wv.finalize())**2, axis=(1,2))) for wv in welford_diff_vars_Ts[t_idx]])
+    print(vars)
+    print(diff_vars)
+    
+    np.save(output_path+"/vars_"+str(T), vars)
+    np.save(output_path+"/diff_vars_"+str(T), diff_vars)
