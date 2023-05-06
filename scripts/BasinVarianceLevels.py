@@ -89,20 +89,14 @@ for l_idx in range(len(ls)):
 
 # %% 
 sim_model_error_basis_args = {
-    "basis_x_start": 2, 
+    "basis_x_start": 1, 
     "basis_x_end": 7,
-    "basis_y_start": 3,
+    "basis_y_start": 2,
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.0005,
+    "kl_scaling": 0.0025,
 }
-
-# %% 
-sim_mekls = []
-for l_idx in range(len(ls)): 
-    sim_mekls.append( ModelErrorKL.ModelErrorKL(**model_error_args_list[l_idx], **sim_model_error_basis_args) 
-                )
 
 # %% [markdown]
 ## Set-up statisitcs
@@ -133,12 +127,19 @@ for T in Ts:
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--N', type=int, default=100)
-parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error', type=int, default=0,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
+parser.add_argument('--initSteadyState', type=int, default=1, choices=[0,1])
+parser.add_argument('--init_error', type=int, default=0,choices=[0,1])
+parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
+parser.add_argument('--sim_error_timestep', type=float, default=60) 
 
 
 args = parser.parse_args()
+
+init_steady_state = bool(args.initSteadyState)
+if init_steady_state:
+    make_data_args = make_init_steady_state
+else:
+    make_data_args = make_init_fields
 
 init_model_error = bool(args.init_error)
 sim_model_error = bool(args.sim_error)
@@ -156,7 +157,10 @@ log.write("dx = " + str(data_args["dx"]) + ", dy = " + str(data_args["dy"])+"\n"
 log.write("T = " + ", ".join([str(T) for T in Ts]) +"\n\n")
 
 log.write("Init State\n")
-log.write("Lake-at-rest\n\n")
+if init_steady_state: 
+    log.write("Double-bump steady state\n\n")
+else:
+    log.write("Lake-at-rest\n\n")
 
 log.write("Init Perturbation\n")
 if init_model_error:
@@ -188,32 +192,34 @@ log.close()
 
 # %%
 for l_idx in range(len(ls)):  # loop over levels
+    ## Init fields
+    data_args = make_data_args(model_error_args_list[l_idx])
+    if l_idx > 0:
+        coarse_data_args = make_data_args(model_error_args_list[l_idx-1])
+    
     for i in range(N_var): # loop over samples
         print(l_idx, i)
         ## INIT SIM
-        data_args = make_init_fields(model_error_args_list[l_idx])
-        sim = make_sim(model_error_args_list[l_idx], data_args)
+        sim = make_sim(model_error_args_list[l_idx], sample_args=sample_args, init_fields=data_args)
         if init_model_error:
             init_mekls[l_idx].perturbSim(sim)
+        if sim_model_error:
+            sim.model_time_step = sim_model_error_timestep
+            sim.setKLModelError(**sim_model_error_basis_args)
 
+        coarse_sim = None
         if l_idx > 0:
-            coarse_data_args = make_init_fields(model_error_args_list[l_idx-1])
-            coarse_sim = make_sim(model_error_args_list[l_idx-1], coarse_data_args)
+            coarse_sim = make_sim(model_error_args_list[l_idx-1], sample_args=sample_args, init_fields=coarse_data_args)
             if init_model_error:
                 init_mekls[l_idx-1].perturbSimSimilarAs(coarse_sim, modelError=init_mekls[l_idx])
+            if sim_model_error:
+                coarse_sim.model_time_step = sim_model_error_timestep
+                coarse_sim.setKLModelError(**sim_model_error_basis_args)
 
         ## EVOLVE SIMS
         for t_idx, T in enumerate(Ts): 
-            while sim.t < T:
-                t_step = np.minimum(sim_model_error_timestep, T-sim.t)
-                sim.step(t_step)
-                if sim_model_error:
-                    sim_mekls[l_idx].perturbSim(sim)
-
-                if l_idx > 0:
-                    coarse_sim.step(t_step)
-                    if sim_model_error:
-                        sim_mekls[l_idx-1].perturbSimSimilarAs(coarse_sim, modelError=sim_mekls[l_idx])
+            if T > 0: 
+                sim.dataAssimilationStep(T, otherSim=coarse_sim)
 
             eta, hu, hv = sim.download(interior_domain_only=True)
             welford_vars_Ts[t_idx][l_idx].update(eta, hu, hv)
@@ -228,8 +234,6 @@ for l_idx in range(len(ls)):  # loop over levels
 for t_idx, T in enumerate(Ts):
     vars = np.array([np.sqrt(np.average(np.array(wv.finalize())**2, axis=(1,2))) for wv in welford_vars_Ts[t_idx]])
     diff_vars = np.array([np.sqrt(np.average(np.array(wv.finalize())**2, axis=(1,2))) for wv in welford_diff_vars_Ts[t_idx]])
-    print(vars)
-    print(diff_vars)
     
     np.save(output_path+"/vars_"+str(T), vars)
     np.save(output_path+"/diff_vars_"+str(T), diff_vars)
