@@ -55,11 +55,11 @@ sample_args = {
 
 
 # %%
-model_error_args_list = []
+args_list = []
 
 for l in ls:
     lvl_grid_args = initGridSpecs(l)
-    model_error_args_list.append( {
+    args_list.append( {
         "nx": lvl_grid_args["nx"],
         "ny": lvl_grid_args["ny"],
         "dx": lvl_grid_args["dx"],
@@ -78,14 +78,8 @@ init_model_error_basis_args = {
     "basis_y_end": 7,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.005,
+    "kl_scaling": 0.05,
 }
-
-# %% 
-init_mekls = []
-for l_idx in range(len(ls)): 
-    init_mekls.append( ModelErrorKL.ModelErrorKL(**model_error_args_list[l_idx], **init_model_error_basis_args) 
-                )
 
 # %% 
 sim_model_error_basis_args = {
@@ -95,14 +89,9 @@ sim_model_error_basis_args = {
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.0005,
+    "kl_scaling": 0.005,
 }
 
-# %% 
-sim_mekls = []
-for l_idx in range(len(ls)): 
-    sim_mekls.append( ModelErrorKL.ModelErrorKL(**model_error_args_list[l_idx], **sim_model_error_basis_args) 
-                )
 # %% 
 # Flags for model error
 import argparse
@@ -125,20 +114,21 @@ N_ranks = args.N
 # ## Ensemble
 
 # %% 
-read_path = "/home/florianb/havvarsel/multilevelDA/scripts/VarianceLevels/Basin/2023-05-02T16_50_16"
+read_path = "/home/florianb/havvarsel/multilevelDA/scripts/VarianceLevels/Basin/2023-05-05T14_03_12"
 
-vars = np.load(read_path+"/vars_0.npy")
-diff_vars = np.load(read_path+"/diff_vars_0.npy")
+vars = np.load(read_path+"/vars_43200.npy")
+diff_vars = np.load(read_path+"/diff_vars_43200.npy")
 
 from utils.BasinAnalysis import *
-analysis = Analysis(ls, vars, diff_vars, model_error_args_list)
+analysis = Analysis(ls, vars, diff_vars, args_list)
 
-ML_Nes = analysis.optimal_Ne(tau=5e-5)
+ML_Nes = analysis.optimal_Ne(tau=1e-4)
 
 # %% 
 from utils.BasinEnsembleInit import *
-ML_ensemble = initMLensemble(ls, ML_Nes, model_error_args_list, init_model_error_basis_args, sample_args)
-
+ML_ensemble = initMLensemble(ML_Nes, args_list, make_init_steady_state, sample_args, 
+                             init_model_error_basis_args=init_model_error_basis_args, 
+                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=60.0)
 
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
@@ -150,7 +140,16 @@ ML_prior = copy.deepcopy(MLOceanEnsemble.download())
 # Truth observation
 Hx, Hy = 500, 1000
 R = [5e-5, 5e-3, 5e-3]
+
+# %% 
+# Assimilation
 r = 5e4
+relax_factor = 1.0
+min_location_level = 0
+
+# %% 
+# Simulation
+# Ts = [0, 15*60, 3600, 6*3600, 12*3600]
 
 # %%
 # Book keeping
@@ -195,9 +194,9 @@ log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
 
 log.write("Assimilation\n")
 log.write("r = " +str(r) + "\n")
-log.write("relax_factor = 1\n")
+log.write("relax_factor = " + str(relax_factor) +"\n")
 log.write("obs_var = slice(1,3)\n")
-log.write("min_location_level = 0\n\n")
+log.write("min_location_level = " + str(min_location_level) +"\n\n")
 
 log.write("Statistics\n")
 log.write("N = " + str(N_ranks) + "\n")
@@ -211,6 +210,14 @@ Hys = np.arange(1024, 2048, 2*freq)
 
 ML_ranks = np.zeros((len(Hxs)*N_ranks,3))
 
+# ML_prior_ranksTs = [copy.deepcopy(ML_ranks) for T in Ts]
+# ML_posterior_ranksTs = [copy.deepcopy(ML_ranks) for T in Ts]
+
+# %% 
+# Truth
+data_args = make_init_steady_state(args_list[-1])
+init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
+
 # %% 
 from gpuocean.dataassimilation import MLEnKFOcean
 MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
@@ -218,13 +225,16 @@ MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
 for n in range(N_ranks):
     print(n)
 
-    truth = make_sim(model_error_args_list[-1], sample_args)
-    init_mekls[-1].perturbSim(truth)
+    truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args)
+    init_mekl.perturbSim(truth)
+
+    # Here we cheat!
+    # In interest of time, we avoid initialising a new ensemble and reload the old prior!!
+    MLOceanEnsemble.upload( ML_prior )
 
     true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
     obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-    MLOceanEnsemble.upload( ML_prior )
 
     MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, r = 5*1e7, obs_var=slice(1,3), relax_factor = 1.0, min_localisation_level=0)
 
