@@ -16,6 +16,15 @@ from matplotlib import pyplot as plt
 
 import pycuda.driver as cuda
 
+# %% 
+import signal
+
+def handler(signum, frame):
+    raise Exception("Time Out: Experiment aborted!")
+
+signal.signal(signal.SIGALRM, handler)
+
+
 # %%
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -125,22 +134,6 @@ analysis = Analysis(ls, vars, diff_vars, args_list)
 ML_Nes = analysis.optimal_Ne(tau=1.25e-4)
 
 # %% 
-from utils.BasinEnsembleInit import *
-ML_ensemble = initMLensemble(ML_Nes, args_list, make_init_steady_state, sample_args, 
-                             init_model_error_basis_args=init_model_error_basis_args, 
-                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=60.0)
-
-from gpuocean.ensembles import MultiLevelOceanEnsemble
-MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
-
-print("Prior saved!")
-ML_prior = copy.deepcopy(MLOceanEnsemble.download())
-
-# %%
-from gpuocean.dataassimilation import MLEnKFOcean
-MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
-
-# %% 
 # Truth observation
 Hx, Hy = 500, 1000
 R = [5e-5, 5e-3, 5e-3]
@@ -180,6 +173,7 @@ if init_model_error:
     log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
     log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
 else: 
+    init_model_error_basis_args = None
     log.write("False\n\n")
 
 log.write("Temporal Perturbation\n")
@@ -192,6 +186,7 @@ if sim_model_error:
     log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
     log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
 else:
+    sim_model_error_basis_args = None
     log.write("False\n\n")
 
 log.write("Truth\n")
@@ -210,6 +205,94 @@ log.write("N = " + str(N_ranks) + "\n")
 
 log.close()
 
+
+# %% 
+data_args_list = []
+for l_idx in range(len(args_list)):
+    data_args_list.append( make_init_steady_state(args_list[l_idx]) )
+
+# %% 
+# Truth
+truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args_list[-1])
+if init_model_error:
+    init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
+    init_mekl.perturbSim(truth)
+if sim_model_error:
+    truth.setKLModelError(**sim_model_error_basis_args)
+    truth.model_time_step = 60.0
+
+# %% 
+# Initialise ensemble
+# Since we aim to re-use all objects, we do NOT use the `BasinEnsembleInit.py`
+
+# Model errors
+if init_model_error_basis_args: 
+    init_mekls = []
+    for l_idx in range(len(args_list)): 
+        init_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **init_model_error_basis_args) )
+
+if sim_model_error_basis_args: 
+    sim_mekls = []
+    for l_idx in range(len(args_list)): 
+        sim_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **sim_model_error_basis_args) )
+
+sim_model_error_time_step=60.0
+
+ ## MultiLevel ensemble
+ML_ensemble = []
+
+# 0-level
+lvl_ensemble = []
+for i in range(ML_Nes[0]):
+    if i % 100 == 0: print(i)
+    sim = make_sim(args_list[0], sample_args, init_fields=data_args_list[0])
+    if init_model_error_basis_args:
+        init_mekls[0].perturbSim(sim)
+    if sim_model_error_basis_args:
+        # sim.setKLModelError(**sim_model_error_basis_args)
+        sim.model_error = sim_mekls[0]
+    sim.model_time_step = sim_model_error_time_step
+    lvl_ensemble.append( sim )
+
+ML_ensemble.append(lvl_ensemble)
+
+# diff-levels
+for l_idx in range(1,len(ML_Nes)):
+    print(l_idx)
+    lvl_ensemble0 = []
+    lvl_ensemble1 = []
+    
+    for e in range(ML_Nes[l_idx]):
+        sim0 = make_sim(args_list[l_idx], sample_args, init_fields=data_args_list[l_idx])
+        sim1 = make_sim(args_list[l_idx-1], sample_args, init_fields=data_args_list[l_idx-1])
+        
+        if init_model_error_basis_args:
+            init_mekls[l_idx].perturbSim(sim0)
+            init_mekls[l_idx-1].perturbSimSimilarAs(sim1, modelError=init_mekls[l_idx])
+
+        if sim_model_error_basis_args:
+            sim0.model_error = sim_mekls[l_idx]
+            sim1.model_error = sim_mekls[l_idx-1]
+
+        sim0.model_time_step = sim_model_error_time_step
+        sim1.model_time_step = sim_model_error_time_step
+
+        lvl_ensemble0.append(sim0)
+        lvl_ensemble1.append(sim1)
+    
+    ML_ensemble.append([lvl_ensemble0,lvl_ensemble1])
+
+#%% 
+from gpuocean.ensembles import MultiLevelOceanEnsemble
+MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
+
+print("Prior saved!")
+ML_prior = copy.deepcopy(MLOceanEnsemble.download())
+
+# %%
+from gpuocean.dataassimilation import MLEnKFOcean
+MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
+
 # %%
 freq = 50
 Hxs = np.arange( 512, 1024, freq)
@@ -221,75 +304,85 @@ ML_prior_ranksTs = [copy.deepcopy(ML_ranks) for T in Ts]
 ML_posterior_ranksTs = [copy.deepcopy(ML_ranks) for T in Ts]
 
 # %% 
-# Truth
-data_args = make_init_steady_state(args_list[-1])
-if init_model_error:
-    init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
-
-# %% 
-for n in range(N_ranks):
+n = 0
+while n < N_ranks:
     print("\n\nExperiment: ", n)
 
-    # New Truth
-    print("Make a new truth")
-    truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args)
-    if init_model_error:
-        init_mekl.perturbSim(truth)
-    if sim_model_error:
-        truth.setKLModelError(**sim_model_error_basis_args)
-        truth.model_time_step = 60.0
+    try:
+        signal.alarm(10*60)
 
-    # New Ensemble
-    # ML_ensemble = initMLensemble(ML_Nes, args_list, make_init_steady_state, sample_args, 
-    #                          init_model_error_basis_args=init_model_error_basis_args, 
-    #                          sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=60.0)
-    # MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
+        # New Truth
+        print("Make a new truth")
+        truth.upload(data_args_list[-1]["eta"], data_args_list[-1]["hu"], data_args_list[-1]["hv"])
+        truth.t = 0.0
+        if init_model_error:
+            init_mekl.perturbSim(truth)
 
-    MLOceanEnsemble.upload(ML_prior)
-    for e in range(ML_Nes[0]):
-        MLOceanEnsemble.ML_ensemble[0][e].t = 0.0
-    for l_idx in range(1, len(ML_Nes)):
-        for e in range(ML_Nes[l_idx]):
-            MLOceanEnsemble.ML_ensemble[l_idx][0][e].t = 0.0
-            MLOceanEnsemble.ML_ensemble[l_idx][1][e].t = 0.0
+        # New Ensemble
+        # 0-level
+        for e in range(ML_Nes[0]):
+            MLOceanEnsemble.ML_ensemble[0][e].upload(data_args_list[0]["eta"], data_args_list[0]["hu"], data_args_list[0]["hv"])
+            MLOceanEnsemble.ML_ensemble[0][e].t = 0.0
+            if init_model_error_basis_args:
+                init_mekls[0].perturbSim(MLOceanEnsemble.ML_ensemble[0][e])
 
-    print("Lets start to move")
-    t_now = 0.0
-    for t_idx, T in enumerate(Ts):
+        # diff-levels
+        for l_idx in range(1,len(ML_Nes)):
+            for e in range(ML_Nes[l_idx]):
+                MLOceanEnsemble.ML_ensemble[l_idx][0][e].upload(data_args_list[l_idx]["eta"], data_args_list[l_idx]["hu"], data_args_list[l_idx]["hv"])
+                MLOceanEnsemble.ML_ensemble[l_idx][0][e].t = 0.0
+                
+                MLOceanEnsemble.ML_ensemble[l_idx][1][e].upload(data_args_list[l_idx-1]["eta"], data_args_list[l_idx-1]["hu"], data_args_list[l_idx-1]["hv"])
+                MLOceanEnsemble.ML_ensemble[l_idx][1][e].t = 0.0
 
-        numDAsteps = int((T-t_now)/da_timestep)  
+                if init_model_error_basis_args:
+                    init_mekls[l_idx].perturbSim(MLOceanEnsemble.ML_ensemble[l_idx][0][e])
+                    init_mekls[l_idx-1].perturbSimSimilarAs(MLOceanEnsemble.ML_ensemble[l_idx][1][e], modelError=init_mekls[l_idx])
 
-        for step in range(numDAsteps):
-            truth.dataAssimilationStep(t_now+300)
-            MLOceanEnsemble.stepToObservation(t_now+300)
-            t_now += 300
 
-            if step < numDAsteps-1:
-                print("non-recorded DA")
-                true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-                obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        print("Lets start to move")
+        t_now = 0.0
+        for t_idx, T in enumerate(Ts):
 
-                MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, 
-                                    r=r, obs_var=slice(1,3), relax_factor=relax_factor, min_localisation_level=min_location_level)
+            numDAsteps = int((T-t_now)/da_timestep)  
 
-        print("recorded DA")
-        ML_prior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)] = MLOceanEnsemble.rank(truth, [z for z in zip(Hxs, Hys)])
+            for step in range(numDAsteps):
+                truth.dataAssimilationStep(t_now+300)
+                MLOceanEnsemble.stepToObservation(t_now+300)
+                t_now += 300
 
-        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+                if step < numDAsteps-1:
+                    print("non-recorded DA")
+                    true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+                    obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-        MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, 
-                                    r=r, obs_var=slice(1,3), relax_factor=relax_factor, min_localisation_level=min_location_level)
+                    MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, 
+                                        r=r, obs_var=slice(1,3), relax_factor=relax_factor, min_localisation_level=min_location_level)
 
-        ML_posterior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)] = MLOceanEnsemble.rank(truth, [z for z in zip(Hxs, Hys)])
+            print("recorded DA")
+            ML_prior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)] = MLOceanEnsemble.rank(truth, [z for z in zip(Hxs, Hys)])
 
-        print(T)
+            true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-        print("Check sim times: ", truth.t, MLOceanEnsemble.ML_ensemble[0][0].t)
+            MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, 
+                                        r=r, obs_var=slice(1,3), relax_factor=relax_factor, min_localisation_level=min_location_level)
 
-    for t_idx, T in enumerate(Ts):
-        np.save(output_path+"/MLpriorRanks_"+str(T)+"_dump_"+str(n)+".npy", ML_prior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)])
-        np.save(output_path+"/MLposteriorRanks_"+str(T)+"_dump_"+str(n)+".npy", ML_posterior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)])
+            ML_posterior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)] = MLOceanEnsemble.rank(truth, [z for z in zip(Hxs, Hys)])
+
+            print(T)
+
+        for t_idx, T in enumerate(Ts):
+            np.save(output_path+"/MLpriorRanks_"+str(T)+"_dump_"+str(n)+".npy", ML_prior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)])
+            np.save(output_path+"/MLposteriorRanks_"+str(T)+"_dump_"+str(n)+".npy", ML_posterior_ranksTs[t_idx][n*len(Hxs):(n+1)*len(Hxs)])
+
+        n = n+1
+        signal.alarm(0)
+
+    except Exception as exc:
+        print(exc)
+        signal.alarm(0)
+        pass
 
 # %% 
 for t_idx, T in enumerate(Ts):
