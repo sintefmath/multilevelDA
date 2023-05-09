@@ -1,7 +1,6 @@
 from utils.BasinInit import *
-from utils.WindPerturb import *
 
-from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 #####################################
 # TODO: Implement in framework of `ÒceanModelEnsemble`!
@@ -9,13 +8,44 @@ from gpuocean.SWEsimulators import CDKLM16
 # This script mostly consists of duplicates 
 # But for convenience in the Rossby example all functionalities are collected here
 
-def initSLensemble(gpu_ctx, ls, Ne, KLSampler, wind_weight, wind_T, wind_speed):
+def initSLensemble(Ne, args, data_args, sample_args, 
+                    init_model_error_basis_args=None, 
+                    sim_model_error_basis_args=None, sim_model_error_time_step=60.0):
+    
+    sim_args = {
+        "gpu_ctx" : args["gpu_ctx"],
+        "nx" : args["nx"],
+        "ny" : args["ny"],
+        "dx" : args["dx"],
+        "dy" : args["dy"],
+        "f"  : sample_args["f"],
+        "g"  : sample_args["g"],
+        "r"  : 0,
+        "dt" : 0,
+        "boundary_conditions": Common.BoundaryConditions(2,2,2,2),
+        "eta0" : data_args["eta"],
+        "hu0"  : data_args["hu"],
+        "hv0"  : data_args["hv"],
+        "H"    : data_args["Hi"],
+    }
+
+
     SL_ensemble = []
 
-    data_args = initLevel(ls[-1])
+    if init_model_error_basis_args:
+        init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
+
+    if sim_model_error_basis_args:
+        sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
+
     for e in range(Ne):
-        wind = wind_sample(KLSampler, wind_T, wind_weight=wind_weight, wind_speed=wind_speed)
-        SL_ensemble.append(CDKLM16.CDKLM16(gpu_ctx, **data_args, wind=wind))
+        sim = CDKLM16.CDKLM16(**sim_args) 
+        if init_model_error_basis_args:
+            init_mekl.perturbSim(sim)
+        if sim_model_error_basis_args:
+            sim.model_error = sim_mekl
+            sim.model_time_step = sim_model_error_time_step
+        SL_ensemble.append( sim )
 
     return SL_ensemble
 
@@ -23,6 +53,11 @@ def initSLensemble(gpu_ctx, ls, Ne, KLSampler, wind_weight, wind_T, wind_speed):
 def SLstep(SL_ensemble, t):
     for e in range(len(SL_ensemble)):
         SL_ensemble[e].step(t)
+
+    
+def SLstepToObservation(SL_ensemble, T):
+    for e in range(len(SL_ensemble)):
+        SL_ensemble[e].dataAssimilationStep(T)
 
 
 def SLdownload(SL_ensemble, interior_domain_only=True):
@@ -39,6 +74,11 @@ def SLupload(SL_ensemble, SL_state):
         SL_ensemble[e].upload(*np.pad(SL_state[:,:,:,e], ((0,0),(2,2),(2,2))))
 
 
+def SLestimate(SL_ensemble, func):
+    SL_state = SLdownload(SL_ensemble)
+    return func(SL_state, axis=-1)
+
+
 def GCweights(SL_ensemble, Hx, Hy, r):
     Xs = np.linspace(0, SL_ensemble[0].nx * SL_ensemble[0].dx, SL_ensemble[0].nx)
     Ys = np.linspace(0, SL_ensemble[0].ny * SL_ensemble[0].dy, SL_ensemble[0].ny)
@@ -48,8 +88,6 @@ def GCweights(SL_ensemble, Hx, Hy, r):
     obs_loc[0] = X[0,Hx]
     obs_loc[1] = Y[Hy,0]
     dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
-
-    r = 2.5*1e7
 
     GC = np.zeros_like(dists)
     for i in range(dists.shape[0]):
@@ -63,17 +101,24 @@ def GCweights(SL_ensemble, Hx, Hy, r):
     return GC
 
 
-def SLEnKF(SL_ensemble, obs, Hx, Hy, R, r = 2.5*1e7):
+def SLEnKF(SL_ensemble, obs, Hx, Hy, R, r, obs_var, localisation_weights=None):
     
     ## Prior
     SL_state = SLdownload(SL_ensemble) 
     SL_Ne = len(SL_ensemble)
 
+    # Variables
+    if obs_var.step is None:
+        obs_varN = (obs_var.stop - obs_var.start) 
+    else: 
+        obs_varN = (obs_var.stop - obs_var.start)/obs_var.step
+
     ## Localisation
-    GC = GCweights(SL_ensemble, Hx, Hy, r)
+    if localisation_weights is None:
+        localisation_weights = np.ones((SL_ensemble[0].ny, SL_ensemble[0].nx))
     
     ## Perturbations
-    SL_perts = np.random.multivariate_normal(np.zeros(3), np.diag(R), size=SL_Ne)
+    SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
 
     ## Analysis
     obs_idxs = [Hy, Hx]
@@ -81,19 +126,21 @@ def SLEnKF(SL_ensemble, obs, Hx, Hy, R, r = 2.5*1e7):
     X0 = SL_state
     X0mean = np.average(X0, axis=-1)
 
-    Y0 = SL_state[:,obs_idxs[0],obs_idxs[1]] + SL_perts.T
+    Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] + SL_perts.T
     Y0mean = np.average(Y0, axis=-1)
 
-    SL_XY = (np.tile(GC.flatten(),3)[:,np.newaxis]*1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean[:,np.newaxis]).T)).reshape(X0mean.shape + (3,))
+    SL_XY = (np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
+             *1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean[:,np.newaxis]).T)
+             ).reshape(X0mean.shape + (obs_varN,))
 
-    SL_HXY = SL_XY[:,obs_idxs[0],obs_idxs[1],:]
-    SL_YY  = SL_HXY + np.diag(R)
+    SL_HXY = SL_XY[obs_var,obs_idxs[0],obs_idxs[1],:]
+    SL_YY  = SL_HXY + np.diag(R[obs_var])
 
     SL_K = SL_XY @ np.linalg.inv(SL_YY)
 
     ## Update
-    SL_state = SL_state + (SL_K @ (obs[:,np.newaxis] - SL_state[:,obs_idxs[0],obs_idxs[1]] - SL_perts.T))
+    SL_state = SL_state + (SL_K @ (obs[obs_var,np.newaxis] - SL_state[obs_var,obs_idxs[0],obs_idxs[1]] - SL_perts.T))
 
     SLupload(SL_ensemble, SL_state)
 
-    return SL_state
+    return SL_K
