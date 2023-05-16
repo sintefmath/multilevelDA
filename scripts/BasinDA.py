@@ -53,8 +53,6 @@ sample_args = {
     "f": 0.0012,
     }
 
-# %%
-T = 12*3600
 
 # %%
 args_list = []
@@ -98,14 +96,16 @@ sim_model_error_basis_args = {
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--N', type=int, default=100)
+parser.add_argument('--Tda', type=float, default=6*3600)
+parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=0,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
 
-
 args = parser.parse_args()
 
+T_da = args.Tda
+T_forecast = args.Tforecast
 init_model_error = bool(args.init_error)
 sim_model_error = bool(args.sim_error)
 sim_model_error_timestep = args.sim_error_timestep
@@ -128,7 +128,7 @@ ML_Nes = analysis.optimal_Ne(tau=5e-5)
 # Truth observation
 Hxs = [ 500,  400,  600,  400,  600]
 Hys = [1000,  900,  900, 1100, 1100]
-R = [5e-5, 5e-3, 5e-3]
+R = [5e-4, 5e-2, 5e-2]
 
 # %% 
 # Assimilation
@@ -147,7 +147,8 @@ log.write("Nes = " + ", ".join([str(Ne) for Ne in ML_Nes])+"\n\n")
 data_args = initGridSpecs(ls[-1])
 log.write("nx = " + str(data_args["nx"]) + ", ny = " + str(data_args["ny"])+"\n")
 log.write("dx = " + str(data_args["dx"]) + ", dy = " + str(data_args["dy"])+"\n")
-log.write("T = " + str(T) +"\n\n")
+log.write("T (DA) = " + str(T_da) +"\n")
+log.write("T (forecast) = " + str(T_forecast) +"\n\n")
 
 log.write("Init State\n")
 log.write("Double Bump\n\n")
@@ -191,9 +192,26 @@ log.write("DA time steps: " + str(da_timestep) + "\n")
 log.close()
 
 # %% 
+def write2file(T):
+    true_state = truth.download(interior_domain_only=True)
+    np.save(output_path+"/truth_"+str(T)+".npy", np.array(true_state))
+
+    ML_state = MLOceanEnsemble.download()
+    np.save(output_path+"/MLensemble_0_"+str(T)+".npy", np.array(ML_state[0]))
+    for l_idx in enumerate(1,len(ls)):
+        np.save(output_path+"/MLensemble_"+str(l_idx)+"_0_"+str(T)+".npy", np.array(ML_state[l_idx][0]))
+        np.save(output_path+"/MLensemble_"+str(l_idx)+"_1_"+str(T)+".npy", np.array(ML_state[l_idx][1]))
+
+# %% 
+# initial fields
+data_args_list = []
+for l_idx in range(len(args_list)):
+    data_args_list.append( make_init_steady_state(args_list[l_idx]) )
+
+# %%
 # Ensemble
 from utils.BasinEnsembleInit import *
-ML_ensemble = initMLensemble(ML_Nes, args_list, make_init_steady_state, sample_args, 
+ML_ensemble = initMLensemble(ML_Nes, args_list, data_args_list, sample_args, 
                              init_model_error_basis_args=init_model_error_basis_args, 
                              sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=60.0)
 
@@ -207,8 +225,7 @@ MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
 
 # %% 
 # Truth
-data_args = make_init_steady_state(args_list[-1])
-truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args)
+truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args_list[-1])
 if init_model_error:
     init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
     init_mekl.perturbSim(truth)
@@ -217,7 +234,8 @@ if sim_model_error:
     truth.model_time_step = 60.0
 
 # %% 
-while truth.t < T:
+# DA period
+while truth.t < T_da:
     # Forward step
     truth.dataAssimilationStep(truth.t+300)
     MLOceanEnsemble.stepToObservation(truth.t)
@@ -231,10 +249,14 @@ while truth.t < T:
         MLEnKF.assimilate(MLOceanEnsemble, obs, Hx, Hy, R, 
                             r=r, obs_var=slice(1,3), relax_factor=relax_factor, min_localisation_level=min_location_level)
 
+# %% 
+write2file(int(truth.t))
+
+# %%
+# Forecast period
+truth.dataAssimilationStep(truth.t+T_forecast)
+MLOceanEnsemble.stepToObservation(truth.t)
+
 
 # %% 
-ML_state = MLOceanEnsemble.download()
-np.save(output_path+"/MLensemble_"+str(0)+".npy", np.array(ML_state[0]))
-for l_idx in enumerate(1,len(ls)):
-    np.save(output_path+"/MLensemble_"+str(l_idx)+"_0.npy", np.array(ML_state[l_idx][0]))
-    np.save(output_path+"/MLensemble_"+str(l_idx)+"_1.npy", np.array(ML_state[l_idx][1]))
+write2file(int(truth.t))
