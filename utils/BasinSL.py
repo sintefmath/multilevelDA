@@ -32,17 +32,17 @@ def initSLensemble(Ne, args, data_args, sample_args,
 
     SL_ensemble = []
 
-    if init_model_error_basis_args:
+    if init_model_error_basis_args is not None:
         init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
 
-    if sim_model_error_basis_args:
+    if sim_model_error_basis_args is not None:
         sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
 
     for e in range(Ne):
         sim = CDKLM16.CDKLM16(**sim_args) 
-        if init_model_error_basis_args:
+        if init_model_error_basis_args is not None:
             init_mekl.perturbSim(sim)
-        if sim_model_error_basis_args:
+        if sim_model_error_basis_args is not None:
             sim.model_error = sim_mekl
             sim.model_time_step = sim_model_error_time_step
         SL_ensemble.append( sim )
@@ -101,7 +101,8 @@ def GCweights(SL_ensemble, Hx, Hy, r):
     return GC
 
 
-def SLEnKF(SL_ensemble, obs, Hx, Hy, R, r, obs_var, localisation_weights=None):
+def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var, 
+           relax_factor=1.0, localisation_weights=None):
     
     ## Prior
     SL_state = SLdownload(SL_ensemble) 
@@ -129,7 +130,7 @@ def SLEnKF(SL_ensemble, obs, Hx, Hy, R, r, obs_var, localisation_weights=None):
     Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] + SL_perts.T
     Y0mean = np.average(Y0, axis=-1)
 
-    SL_XY = (np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
+    SL_XY = (relax_factor*np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
              *1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean[:,np.newaxis]).T)
              ).reshape(X0mean.shape + (obs_varN,))
 
