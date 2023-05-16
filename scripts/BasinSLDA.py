@@ -83,7 +83,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=100)
 parser.add_argument('--Tda', type=float, default=6*3600)
-parser.add_argument('--Tforecast', type=float, default=0)
+parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
@@ -252,7 +252,8 @@ while truth.t < T_da:
         true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-        SLEnKF(SL_ensemble, obs, Hx, Hy, R=R, r=r, obs_var=slice(1,3), localisation_weights=localisation_weights_list[h])
+        SLEnKF(SL_ensemble, obs, Hx, Hy, R=R, obs_var=slice(1,3), 
+               relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
     write2file(int(truth.t), "posterior")
 
 
@@ -260,6 +261,6 @@ while truth.t < T_da:
 # %%
 # Forecast period
 while truth.t < T_da + T_forecast:
-    truth.dataAssimilationStep(truth.t+300)
+    truth.dataAssimilationStep(truth.t+3600)
     SLstepToObservation(SL_ensemble, truth.t)
     write2file(int(truth.t), "")
