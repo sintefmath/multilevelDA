@@ -36,6 +36,7 @@ from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.BasinInit import *
+from utils.BasinPlot import *
 from utils.BasinSL import *
 # %%
 gpu_ctx = Common.CUDAContext()
@@ -46,7 +47,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 10
+L = 9
 
 # %% 
 sample_args = {
@@ -86,7 +87,7 @@ parser.add_argument('--Tda', type=float, default=6*3600)
 parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
+parser.add_argument('--sim_error_timestep', type=float, default=60) 
 
 pargs = parser.parse_args()
 
@@ -102,17 +103,18 @@ sim_model_error_timestep = pargs.sim_error_timestep
 
 # %% 
 # Truth observation
-Hxs = [ 500,  300,  700,  300,  700]
-Hys = [1000,  800,  800, 1200, 1200]
-R = [5e-5, 5e-3, 5e-3]
+truth_path = "/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49"
+Hxs = [ 250]
+Hys = [500]
+R = [0.1, 1.0, 1.0]
 
 # %% 
 # Assimilation
 r = 2.5e4
-relax_factor = 0.25
+relax_factor = 0.1
 localisation = True
 
-da_timestep = 300
+da_timestep = 900
 
 # %%
 # Book keeping
@@ -154,6 +156,12 @@ else:
     log.write("False\n\n")
 
 log.write("Truth\n")
+log.write("from file: " + truth_path + "\n")
+
+truth0 = np.load(truth_path+"/truth_0.npy")
+assert truth0.shape[1] == grid_args["ny"], "Truth has wrong dimensions"
+assert truth0.shape[2] == grid_args["nx"], "Truth has wrong dimensions"
+
 log.write("Hx, Hy: " + " / ".join([str(Hx) + ", " + str(Hy)   for Hx, Hy in zip(Hxs,Hys)]) + "\n")
 log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
 
@@ -169,8 +177,6 @@ log.close()
 # %% 
 def write2file(T, mode=""):
     print("Saving ", mode, " at time ", T)
-    true_state = truth.download(interior_domain_only=True)
-    np.save(output_path+"/truth_"+str(T)+".npy", np.array(true_state))
 
     SL_state = SLdownload(SL_ensemble)
     np.save(output_path+"/SLensemble_"+str(T)+"_"+mode+".npy", np.array(SL_state))
@@ -190,46 +196,52 @@ args = {
 data_args = make_init_steady_state(args)
 
 
+# %% 
+def makePlots(SL_K):
+    # mean
+    SL_mean = SLestimate(SL_ensemble, np.mean)
+    fig, axs = imshow3(SL_mean)
+    plt.savefig(output_path+"/SLmean_"+str(int(SL_ensemble[0].t))+".pdf")
+
+    # var
+    SL_var = SLestimate(SL_ensemble, np.var)
+    fig, axs = imshow3var(SL_var, eta_vlim=0.01, huv_vlim=50)
+    plt.savefig(output_path+"/SLvar_"+str(int(SL_ensemble[0].t))+".pdf")
+
+    # Kalman gain
+    if SL_K is not None:
+        fig, axs = plt.subplots(2,3, figsize=(15,10))
+
+        eta_vlim=5e-3
+        huv_vlim=0.5
+        cmap="coolwarm"
+
+        for i in range(2):
+            etahuhv = SL_K[:,:,:,i]
+
+            im = axs[i,0].imshow(etahuhv[0], vmin=-eta_vlim, vmax=eta_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,0], shrink=0.5)
+            axs[i,0].set_title("$\eta$", fontsize=15)
+
+            im = axs[i,1].imshow(etahuhv[1], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,1], shrink=0.5)
+            axs[i,1].set_title("$hu$", fontsize=15)
+
+            im = axs[i,2].imshow(etahuhv[2], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,2], shrink=0.5)
+            axs[i,2].set_title("$hv$", fontsize=15)
+
+        plt.savefig(output_path+"/SLK_"+str(int(SL_ensemble[0].t))+".pdf")
+
+    plt.close('all')
+
+
 # %%
 # Ensemble
 SL_ensemble = initSLensemble(Ne, args, data_args, sample_args, 
                              init_model_error_basis_args=init_model_error_basis_args, 
                              sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
 
-
-
-# %% 
-# Truth
-if init_model_error:
-    init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
-
-if sim_model_error:
-    sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
-
-sim_args = {
-    "gpu_ctx" : args["gpu_ctx"],
-    "nx" : args["nx"],
-    "ny" : args["ny"],
-    "dx" : args["dx"],
-    "dy" : args["dy"],
-    "f"  : sample_args["f"],
-    "g"  : sample_args["g"],
-    "r"  : 0,
-    "dt" : 0,
-    "boundary_conditions": Common.BoundaryConditions(2,2,2,2),
-    "eta0" : data_args["eta"],
-    "hu0"  : data_args["hu"],
-    "hv0"  : data_args["hv"],
-    "H"    : data_args["Hi"],
-}
-
-
-truth = CDKLM16.CDKLM16(**sim_args) 
-if init_model_error:
-    init_mekl.perturbSim(truth)
-if sim_model_error:
-    truth.model_error = sim_mekl
-    truth.model_time_step = sim_model_error_timestep
 
 # %%
 if localisation:
@@ -239,28 +251,29 @@ if localisation:
 
 # %% 
 # DA period
-write2file(int(truth.t), "")
+# write2file(int(truth.t), "")
 
-while truth.t < T_da:
+while SL_ensemble[0].t < T_da:
     # Forward step
-    truth.dataAssimilationStep(truth.t+300)
-    SLstepToObservation(SL_ensemble, truth.t)
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
 
     # DA step
-    write2file(int(truth.t), "prior")
+    # write2file(int(truth.t), "prior")
+    true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
     for h, [Hx, Hy] in enumerate(zip(Hxs, Hys)):
-        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-        SLEnKF(SL_ensemble, obs, Hx, Hy, R=R, obs_var=slice(1,3), 
+        SL_K = SLEnKF(SL_ensemble, obs, Hx, Hy, R=R, obs_var=slice(1,3), 
                relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
-    write2file(int(truth.t), "posterior")
+    # write2file(int(truth.t), "posterior")
+
+    makePlots(SL_K)
 
 
 
 # %%
 # Forecast period
-while truth.t < T_da + T_forecast:
-    truth.dataAssimilationStep(truth.t+3600)
-    SLstepToObservation(SL_ensemble, truth.t)
-    write2file(int(truth.t), "")
+while SL_ensemble[0].t < T_da + T_forecast:
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 3600)
+    # write2file(int(SL_ensemble[0].t), "")
+    makePlots(None)

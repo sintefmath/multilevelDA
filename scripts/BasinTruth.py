@@ -20,7 +20,7 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/BasinSL/"+timestamp 
+output_path = "DataAssimilation/Truth/"+timestamp 
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
@@ -36,6 +36,7 @@ from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.BasinInit import *
+from utils.BasinPlot import * 
 from utils.BasinSL import *
 # %%
 gpu_ctx = Common.CUDAContext()
@@ -46,7 +47,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 10
+L = 9
 
 # %% 
 sample_args = {
@@ -63,7 +64,7 @@ init_model_error_basis_args = {
     "basis_y_end": 7,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.05,
+    "kl_scaling": 0.18,
 }
 
 # %% 
@@ -74,7 +75,7 @@ sim_model_error_basis_args = {
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.0025,
+    "kl_scaling": 0.004,
 }
 
 
@@ -86,7 +87,7 @@ parser.add_argument('--Tda', type=float, default=6*3600)
 parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=5*60) 
+parser.add_argument('--sim_error_timestep', type=float, default=60) 
 
 pargs = parser.parse_args()
 
@@ -143,8 +144,8 @@ else:
 log.close()
 
 # %% 
-def write2file(T, mode=""):
-    print("Saving ", mode, " at time ", T)
+def write2file(T):
+    print("Saving at time ", T)
     true_state = truth.download(interior_domain_only=True)
     np.save(output_path+"/truth_"+str(T)+".npy", np.array(true_state))
     
@@ -198,14 +199,16 @@ if sim_model_error:
 
 # %% 
 # DA period
-write2file(int(truth.t), "")
+write2file(int(truth.t))
 
 while truth.t < T_da + T_forecast:
     # Forward step
     truth.dataAssimilationStep(truth.t+300)
 
     # DA step
-    write2file(int(truth.t), "")
+    write2file(int(truth.t))
 
+    imshowSim(truth)
+    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
+    plt.close("all")
 
-# %%

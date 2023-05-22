@@ -78,7 +78,7 @@ init_model_error_basis_args = {
     "basis_y_end": 7,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.005,
+    "kl_scaling": 0.18,
 }
 
 # %% 
@@ -95,7 +95,7 @@ sim_model_error_basis_args = {
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.0025,
+    "kl_scaling": 0.004,
 }
 
 # %% [markdown]
@@ -128,9 +128,9 @@ import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--N', type=int, default=100)
 parser.add_argument('--initSteadyState', type=int, default=1, choices=[0,1])
-parser.add_argument('--init_error', type=int, default=0,choices=[0,1])
+parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=60) 
+parser.add_argument('--sim_error_timestep', type=float, default=60.0) 
 
 
 args = parser.parse_args()
