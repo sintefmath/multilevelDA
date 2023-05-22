@@ -29,7 +29,7 @@ def make_init_fields(args):
     return {"eta": eta, "hu": hu, "hv": hv, "Hi": Hi}
 
 
-def make_init_steady_state(args, a=1, b = 2.5e-9, sample_args={"g":9.81, "f":0.0012}):
+def make_init_steady_state(args, a=1, b = 2.5e-9, sample_args={"g":9.81, "f":0.0012}, bump_fractal_dist=6):
     dataShape = (args["ny"] + 4, args["nx"] + 4)
     dataShapeH = (args["ny"] + 5, args["nx"] + 5)
 
@@ -60,8 +60,8 @@ def make_init_steady_state(args, a=1, b = 2.5e-9, sample_args={"g":9.81, "f":0.0
         hv0[2:-2,2:-2] += (sample_args["g"]*(etaBump + H_const)/sample_args["f"])*DetaDY
 
 
-    add_bump(nx*dx/2, ny*dy/2 + ny*dy/6, a, b)
-    add_bump(nx*dx/2, ny*dy/2 - ny*dy/6, -a, b)
+    add_bump(nx*dx/2, ny*dy/2 + ny*dy/bump_fractal_dist, a, b)
+    add_bump(nx*dx/2, ny*dy/2 - ny*dy/bump_fractal_dist, -a, b)
 
     return {"eta": eta0, "hu": hu0, "hv": hv0, "Hi": Hi}
 
