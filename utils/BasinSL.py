@@ -102,7 +102,8 @@ def GCweights(SL_ensemble, Hx, Hy, r):
 
 
 def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var, 
-           relax_factor=1.0, localisation_weights=None):
+           relax_factor=1.0, localisation_weights=None,
+           return_perts=False):
     
     ## Prior
     SL_state = SLdownload(SL_ensemble) 
@@ -144,4 +145,32 @@ def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var,
 
     SLupload(SL_ensemble, SL_state)
 
-    return SL_K
+    if return_perts:
+        return SL_K, SL_perts
+    else:
+        return SL_K
+
+
+def SLrank(SL_ensemble, truth, obs_locations, R=None):
+
+    assert truth.nx == SL_ensemble[0].nx, "Truth doesnt match finest level"
+    assert truth.ny == SL_ensemble[0].ny, "Truth doesnt match finest level"
+    assert truth.dx == SL_ensemble[0].dx, "Truth doesnt match finest level"
+    assert truth.dy == SL_ensemble[0].dy, "Truth doesnt match finest level"
+
+    SL_state = SLdownload(SL_ensemble)
+    true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+
+    SL_Fys = []
+    for [Hx, Hy] in obs_locations:
+        true_values = np.array([true_eta[Hy, Hx], true_hu[Hy, Hx], true_hv[Hy, Hx]]) 
+        if R is not None:
+            true_values += np.random.multivariate_normal(mean=np.zeros(3),cov=np.diag(R))
+
+        state_values = SL_state[:,Hy,Hx,:]
+        if R is not None:
+            state_values += np.random.multivariate_normal(mean=np.zeros(3),cov=np.diag(R), size=len(SL_ensemble)).T
+
+        SL_Fys.append( 1/len(SL_ensemble) * np.sum(state_values < true_values[:,np.newaxis], axis=1) )
+
+    return SL_Fys
