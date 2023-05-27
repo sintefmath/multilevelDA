@@ -98,18 +98,21 @@ sim_model_error_basis_args = {
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Tda', type=float, default=6*3600)
-parser.add_argument('--Tforecast', type=float, default=0)
+parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error_timestep', type=float, default=60) 
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49")
 
-args = parser.parse_args()
+pargs = parser.parse_args()
 
-T_da = args.Tda
-T_forecast = args.Tforecast
-init_model_error = bool(args.init_error)
-sim_model_error = bool(args.sim_error)
-sim_model_error_timestep = args.sim_error_timestep
+T_da = pargs.Tda
+T_forecast = pargs.Tforecast
+init_model_error = bool(pargs.init_error)
+sim_model_error = bool(pargs.sim_error)
+sim_model_error_timestep = pargs.sim_error_timestep
+truth_path = pargs.truth_path
+
 
 # %% [markdown] 
 # ## Ensemble
@@ -119,10 +122,9 @@ ML_Nes = [150, 50]
 
 # %% 
 # Truth observation
-truth_path = "/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49"
 Hx = 250
 Hy = 500
-R = [0.1, 1.0, 1.0]
+R = [0.05, 1.0, 1.0]
 
 # %% 
 # Assimilation
@@ -172,11 +174,14 @@ else:
     log.write("False\n\n")
 
 log.write("Truth\n")
-log.write("from file: " + truth_path + "\n")
+if truth_path != "NEW":
+    log.write("from file: " + truth_path + "\n")
 
-truth0 = np.load(truth_path+"/truth_0.npy")
-assert truth0.shape[1] == args_list[-1]["ny"], "Truth has wrong dimensions"
-assert truth0.shape[2] == args_list[-1]["nx"], "Truth has wrong dimensions"
+    truth0 = np.load(truth_path+"/truth_0.npy")
+    assert truth0.shape[1] == args_list[-1]["ny"], "Truth has wrong dimensions"
+    assert truth0.shape[2] == args_list[-1]["nx"], "Truth has wrong dimensions"
+else:
+    log.write("saved to file\n")
 
 log.write("Hx, Hy: " + str(Hx) + ", " + str(Hy) + "\n")
 log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
@@ -199,11 +204,18 @@ def write2file(T):
         np.save(output_path+"/MLensemble_"+str(l_idx)+"_1_"+str(T)+".npy", np.array(ML_state[l_idx][1]))
 
 
-def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior, T):
+def makeTruePlots(truth):
+    fig, axs = imshowSim(truth)
+    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
+
+
+
+def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior):
     # 1 mean
     MLmean = MLOceanEnsemble.estimate(np.mean)
     fig, axs = imshow3(MLmean)
-    plt.savefig(output_path+"/MLmean_"+str(int(T))+".pdf")
+    plt.savefig(output_path+"/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.close('all')
 
     # 1.1 level mean
     # ML_state = MLOceanEnsemble.download()
@@ -222,33 +234,34 @@ def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior, T):
     # 2 var 
     MLvar  = MLOceanEnsemble.estimate(np.var)
     fig, axs = imshow3var(MLvar, eta_vlim=0.01, huv_vlim=50)
-    plt.savefig(output_path+"/MLvar_"+str(int(T))+".pdf")
+    plt.savefig(output_path+"/MLvar_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.close('all')
    
     # 3 ML_K
     eta_vlim=5e-3
     huv_vlim=0.5
     cmap="coolwarm"
 
-    fig, axs = plt.subplots(2,3, figsize=(15,10))
+    if ML_K is not None:
+        fig, axs = plt.subplots(2,3, figsize=(15,10))
 
-    for i in range(2):
-        etahuhv = ML_K[:,i].reshape(3, args_list[-1]["ny"], args_list[-1]["nx"])
+        for i in range(2):
+            etahuhv = ML_K[:,i].reshape(3, args_list[-1]["ny"], args_list[-1]["nx"])
 
-        im = axs[i,0].imshow(etahuhv[0], vmin=-eta_vlim, vmax=eta_vlim, cmap=cmap)
-        plt.colorbar(im, ax=axs[i,0], shrink=0.5)
-        axs[i,0].set_title("$\eta$", fontsize=15)
+            im = axs[i,0].imshow(etahuhv[0], vmin=-eta_vlim, vmax=eta_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,0], shrink=0.5)
+            axs[i,0].set_title("$\eta$", fontsize=15)
 
-        im = axs[i,1].imshow(etahuhv[1], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
-        plt.colorbar(im, ax=axs[i,1], shrink=0.5)
-        axs[i,1].set_title("$hu$", fontsize=15)
+            im = axs[i,1].imshow(etahuhv[1], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,1], shrink=0.5)
+            axs[i,1].set_title("$hu$", fontsize=15)
 
-        im = axs[i,2].imshow(etahuhv[2], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
-        plt.colorbar(im, ax=axs[i,2], shrink=0.5)
-        axs[i,2].set_title("$hv$", fontsize=15)
+            im = axs[i,2].imshow(etahuhv[2], vmin=-huv_vlim, vmax=huv_vlim, cmap=cmap)
+            plt.colorbar(im, ax=axs[i,2], shrink=0.5)
+            axs[i,2].set_title("$hv$", fontsize=15)
 
-    plt.savefig(output_path+"/MLK_"+str(int(T))+".pdf")
-
-    plt.close('all')
+        plt.savefig(output_path+"/MLK_"+str(int(MLOceanEnsemble.t))+".pdf")
+        plt.close('all')
 
     # 3.2 
     if ML_K0 is not None:
@@ -269,30 +282,41 @@ def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior, T):
             plt.colorbar(im, ax=axs[i,2], shrink=0.5)
             axs[i,2].set_title("$hv$", fontsize=15)
 
-        plt.savefig(output_path+"/MLK_"+str(int(T))+"_0.pdf")
-
+        plt.savefig(output_path+"/MLK_"+str(int(MLOceanEnsemble.t))+"_0.pdf")
         plt.close('all')
 
     # 4 Innovation
     with open(output_path+"/innovation.txt", "a") as f:
-        f.write(str(int(T)) + ":  ")
-        f.write(", ".join(["{:1.6f}".format(iuv) for iuv in innov_prior]))
-        f.write(" >> ")
-        f.write(", ".join(["{:1.6f}".format(iuv) for iuv in innov_posterior]) + "\n")
+        if (innov_prior is not None) and (innov_posterior is not None):
+            f.write(str(int(MLOceanEnsemble.t)) + ":  ")
+            f.write(", ".join(["{:1.6f}".format(iuv) for iuv in innov_prior]))
+            f.write(" >> ")
+            f.write(", ".join(["{:1.6f}".format(iuv) for iuv in innov_posterior]) + "\n")
 
 
 # %% 
 # initial fields
 data_args_list = []
 for l_idx in range(len(args_list)):
-    data_args_list.append( make_init_steady_state(args_list[l_idx]) )
+    data_args_list.append( make_init_steady_state(args_list[l_idx], a=3) )
+print("Larger Bump!!!")
+
+# %% 
+if truth_path=="NEW":
+    truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args_list[-1])
+    if init_model_error:
+        init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
+        init_mekl.perturbSim(truth)
+    if sim_model_error:
+        truth.setKLModelError(**sim_model_error_basis_args)
+        truth.model_time_step = sim_model_error_timestep
 
 # %%
 # Ensemble
 from utils.BasinEnsembleInit import *
 ML_ensemble = initMLensemble(ML_Nes, args_list, data_args_list, sample_args, 
                              init_model_error_basis_args=init_model_error_basis_args, 
-                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=60.0)
+                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
 
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
@@ -335,13 +359,21 @@ def KalmanGain0():
 
 # %% 
 # DA period
+makePlots(MLOceanEnsemble, None, None, None, None)
+if truth_path == "NEW":
+    makeTruePlots(truth)
+
 while MLOceanEnsemble.t < T_da:
     # Forward step
     MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
 
     # DA step
     print("DA at ", MLOceanEnsemble.t)
-    true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(truth.t + da_timestep)
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+    else:
+        true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
     obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
     ML_state = MLOceanEnsemble.download()
@@ -387,7 +419,11 @@ while MLOceanEnsemble.t < T_da:
         f.write(("  > >  "))
         f.write(", ".join(["{:1.9f}".format(var_i) for var_i in posterior_var1]) + "\n")
 
-    makePlots(MLOceanEnsemble, ML_K, None, innovation_prior, innovation_posterior, MLOceanEnsemble.t)
+    makePlots(MLOceanEnsemble, ML_K, None, innovation_prior, innovation_posterior)
+
+    if truth_path == "NEW":
+        makeTruePlots(truth)
+
 
 write2file(int(T_da))
 
@@ -421,4 +457,4 @@ while MLOceanEnsemble.t < T_da + T_forecast:
         f.write(str(int(MLOceanEnsemble.t)) + ": ")
         f.write(", ".join(["{:1.9f}".format(var_i) for var_i in prior_var1]) + "\n")
 
-    makePlots(MLOceanEnsemble, np.zeros_like(ML_K), None, innovation_prior, innovation_posterior, MLOceanEnsemble.t)
+    makePlots(MLOceanEnsemble, None, None, innovation_prior, innovation_posterior)
