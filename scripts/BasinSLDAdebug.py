@@ -55,6 +55,9 @@ sample_args = {
     "f": 0.0012,
     }
 
+# %%
+steady_state_bump_a = 3
+steady_state_bump_fractal_dist = 7
 
 # %% 
 init_model_error_basis_args = {
@@ -88,6 +91,7 @@ parser.add_argument('--Tforecast', type=float, default=6*3600)
 parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
 parser.add_argument('--sim_error_timestep', type=float, default=60) 
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49")
 
 pargs = parser.parse_args()
 
@@ -97,16 +101,16 @@ T_forecast = pargs.Tforecast
 init_model_error = bool(pargs.init_error)
 sim_model_error = bool(pargs.sim_error)
 sim_model_error_timestep = pargs.sim_error_timestep
+truth_path = pargs.truth_path
 
 # %% [markdown] 
 # ## Ensemble
 
 # %% 
 # Truth observation
-truth_path = "/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49"
 Hxs = [ 250]
 Hys = [500]
-R = [0.1, 1.0, 1.0]
+R = [0.05, 1.0, 1.0]
 
 # %% 
 # Assimilation
@@ -128,7 +132,10 @@ log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
 
 log.write("Init State\n")
-log.write("Double Bump\n\n")
+log.write("Double Bump\n")
+log.write("Bump size [m]: " + str(steady_state_bump_a) +"\n")
+log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n")
+
 
 log.write("Init Perturbation\n")
 if init_model_error:
@@ -156,11 +163,15 @@ else:
     log.write("False\n\n")
 
 log.write("Truth\n")
-log.write("from file: " + truth_path + "\n")
+if truth_path != "NEW":
+    log.write("from file: " + truth_path + "\n")
 
-truth0 = np.load(truth_path+"/truth_0.npy")
-assert truth0.shape[1] == grid_args["ny"], "Truth has wrong dimensions"
-assert truth0.shape[2] == grid_args["nx"], "Truth has wrong dimensions"
+    truth0 = np.load(truth_path+"/truth_0.npy")
+    assert truth0.shape[1] == grid_args["ny"], "Truth has wrong dimensions"
+    assert truth0.shape[2] == grid_args["nx"], "Truth has wrong dimensions"
+else:
+    log.write("saved to file\n")
+
 
 log.write("Hx, Hy: " + " / ".join([str(Hx) + ", " + str(Hy)   for Hx, Hy in zip(Hxs,Hys)]) + "\n")
 log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
@@ -193,19 +204,23 @@ args = {
     "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
     }
 
-data_args = make_init_steady_state(args)
+data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
 
 # %% 
+def makeTruePlots(truth):
+    fig, axs = imshowSim(truth, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
+    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
+
 def makePlots(SL_K):
     # mean
     SL_mean = SLestimate(SL_ensemble, np.mean)
-    fig, axs = imshow3(SL_mean)
+    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
     plt.savefig(output_path+"/SLmean_"+str(int(SL_ensemble[0].t))+".pdf")
 
     # var
     SL_var = SLestimate(SL_ensemble, np.var)
-    fig, axs = imshow3var(SL_var, eta_vlim=0.01, huv_vlim=50)
+    fig, axs = imshow3var(SL_var, eta_vlim=0.015, huv_vlim=50)
     plt.savefig(output_path+"/SLvar_"+str(int(SL_ensemble[0].t))+".pdf")
 
     # Kalman gain
@@ -236,6 +251,16 @@ def makePlots(SL_K):
     plt.close('all')
 
 
+# %% 
+if truth_path=="NEW":
+    truth = make_sim(args, sample_args=sample_args, init_fields=data_args)
+    if init_model_error:
+        init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
+        init_mekl.perturbSim(truth)
+    if sim_model_error:
+        truth.setKLModelError(**sim_model_error_basis_args)
+        truth.model_time_step = sim_model_error_timestep
+
 # %%
 # Ensemble
 SL_ensemble = initSLensemble(Ne, args, data_args, sample_args, 
@@ -252,14 +277,21 @@ if localisation:
 # %% 
 # DA period
 # write2file(int(truth.t), "")
+makePlots(None)
 
 while SL_ensemble[0].t < T_da:
     # Forward step
     SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
 
     # DA step
+    print("DA at ", SL_ensemble[0].t)
     # write2file(int(truth.t), "prior")
-    true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(truth.t + da_timestep)
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+    else:
+        true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
+    
     for h, [Hx, Hy] in enumerate(zip(Hxs, Hys)):
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
@@ -268,6 +300,8 @@ while SL_ensemble[0].t < T_da:
     # write2file(int(truth.t), "posterior")
 
     makePlots(SL_K)
+    if truth_path == "NEW":
+        makeTruePlots(truth)
 
 
 

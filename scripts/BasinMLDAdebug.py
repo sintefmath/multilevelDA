@@ -71,6 +71,10 @@ for l in ls:
         } )
 
 
+# %%
+steady_state_bump_a = 3
+steady_state_bump_fractal_dist = 7
+
 # %% 
 init_model_error_basis_args = {
     "basis_x_start": 1, 
@@ -146,7 +150,9 @@ log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
 
 log.write("Init State\n")
-log.write("Double Bump\n\n")
+log.write("Double Bump\n")
+log.write("Bump size [m]: " + str(steady_state_bump_a) +"\n")
+log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n")
 
 log.write("Init Perturbation\n")
 if init_model_error:
@@ -205,7 +211,7 @@ def write2file(T):
 
 
 def makeTruePlots(truth):
-    fig, axs = imshowSim(truth)
+    fig, axs = imshowSim(truth, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
     plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
 
 
@@ -213,7 +219,7 @@ def makeTruePlots(truth):
 def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior):
     # 1 mean
     MLmean = MLOceanEnsemble.estimate(np.mean)
-    fig, axs = imshow3(MLmean)
+    fig, axs = imshow3(MLmean, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
     plt.savefig(output_path+"/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf")
     plt.close('all')
 
@@ -233,7 +239,7 @@ def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior):
     
     # 2 var 
     MLvar  = MLOceanEnsemble.estimate(np.var)
-    fig, axs = imshow3var(MLvar, eta_vlim=0.01, huv_vlim=50)
+    fig, axs = imshow3var(MLvar, eta_vlim=0.015, huv_vlim=50)
     plt.savefig(output_path+"/MLvar_"+str(int(MLOceanEnsemble.t))+".pdf")
     plt.close('all')
    
@@ -298,8 +304,7 @@ def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior):
 # initial fields
 data_args_list = []
 for l_idx in range(len(args_list)):
-    data_args_list.append( make_init_steady_state(args_list[l_idx], a=3) )
-print("Larger Bump!!!")
+    data_args_list.append( make_init_steady_state(args_list[l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
 
 # %% 
 if truth_path=="NEW":
