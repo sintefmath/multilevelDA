@@ -103,7 +103,7 @@ def GCweights(SL_ensemble, Hx, Hy, r):
 
 def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var, 
            relax_factor=1.0, localisation_weights=None,
-           return_perts=False):
+           return_perts=False, perts=None):
     
     ## Prior
     SL_state = SLdownload(SL_ensemble) 
@@ -120,7 +120,10 @@ def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var,
         localisation_weights = np.ones((SL_ensemble[0].ny, SL_ensemble[0].nx))
     
     ## Perturbations
-    SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
+    if perts is not None:
+        SL_perts = perts
+    else:
+        SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
 
     ## Analysis
     obs_idxs = [Hy, Hx]
