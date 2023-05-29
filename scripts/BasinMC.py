@@ -1,74 +1,65 @@
 # %% [markdown]
-# # Full simulation in Basin
+# # Multi Level Statistics
 
 # %% [markdown]
 # ### Classes and modules
 
 # %%
-#Lets have matplotlib "inline"
-import os
-import sys
 
 #Import packages we need
 import numpy as np
-import datetime
-from IPython.display import display
-import copy
+import sys, os
 
 #For plotting
 import matplotlib
 from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-plt.rcParams["image.origin"] = "lower"
 
 import pycuda.driver as cuda
+
+# %%
+import datetime
+timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
+
+output_path = "MC/" 
+os.makedirs(output_path, exist_ok=True)
+
+log = open(output_path+"/log.txt", 'w')
+log.write("Parameters for the experimental set-up\n\n")
 
 # %% [markdown]
 # GPU Ocean-modules:
 
 # %%
-from gpuocean.utils import  Common
+from gpuocean.utils import Common
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
-# %%
-gpu_ctx = Common.CUDAContext()
-
-# %%
-gpu_stream = cuda.Stream()
-
-# %% [markdown]
-# Utils
-
-# %%
+# %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.BasinInit import *
-from utils.BasinPlot import * 
-
-# %% [markdown]
-# ### Collecting Perturbations
-
+from utils.BasinPlot import *
+from utils.BasinSL import *
 # %%
+gpu_ctx = Common.CUDAContext()
+gpu_stream = cuda.Stream()
+
+    
+# %% [markdown]
+# ## Setting-up case with different resolutions
+
+# %% 
+L = 9
+
+# %% 
 sample_args = {
     "g": 9.81,
     "f": 0.0012,
     }
 
 # %%
-L = 10
+steady_state_bump_a = 3
+steady_state_bump_fractal_dist = 7
 
-# %%
-grid_args = initGridSpecs(L)
-args =  {
-    "nx": grid_args["nx"],
-    "ny": grid_args["ny"],
-    "dx": grid_args["dx"],
-    "dy": grid_args["dy"],
-    "gpu_ctx": gpu_ctx,
-    "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
-    }
-
-# %%
+# %% 
 init_model_error_basis_args = {
     "basis_x_start": 1, 
     "basis_x_end": 6,
@@ -79,127 +70,129 @@ init_model_error_basis_args = {
     "kl_scaling": 0.18,
 }
 
-# %%
-
-init_mekl =  ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args, gpu_stream=gpu_stream)
-
-# %%
-
+# %% 
 sim_model_error_basis_args = {
-    "basis_x_start": 1, 
+    "basis_x_start": 2, 
     "basis_x_end": 7,
-    "basis_y_start": 2,
+    "basis_y_start": 3,
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.004
+    "kl_scaling": 0.004,
 }
 
+# %% 
+# Flags for model error
+import argparse
+parser = argparse.ArgumentParser(description='Generate an ensemble.')
+parser.add_argument('--Ne', type=int, default=100)
+parser.add_argument('--Tda', type=float, default=6*3600)
+parser.add_argument('--Tforecast', type=float, default=6*3600)
+parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
+parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
+parser.add_argument('--sim_error_timestep', type=float, default=60) 
+
+pargs = parser.parse_args()
+
+Ne = pargs.Ne
+T_da = pargs.Tda
+T_forecast = pargs.Tforecast
+init_model_error = bool(pargs.init_error)
+sim_model_error = bool(pargs.sim_error)
+sim_model_error_timestep = pargs.sim_error_timestep
 
 
 # %%
-data_args = make_init_steady_state(args, bump_fractal_dist=8)
+# Book keeping
+log.write("L = " + str(L) + "\n")
+log.write("Ne = " + str(Ne) + "\n\n")
 
-# %% [markdown]
-# ### Monte Carlo Drifters
+grid_args = initGridSpecs(L)
+log.write("nx = " + str(grid_args["nx"]) + ", ny = " + str(grid_args["ny"])+"\n")
+log.write("dx = " + str(grid_args["dx"]) + ", dy = " + str(grid_args["dy"])+"\n")
+log.write("T (DA) = " + str(T_da) +"\n")
+log.write("T (forecast) = " + str(T_forecast) +"\n\n")
+
+log.write("Init State\n")
+log.write("Double Bump\n")
+log.write("Bump size [m]: " + str(steady_state_bump_a) +"\n")
+log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n")
+
+
+log.write("Init Perturbation\n")
+if init_model_error:
+    log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
+    log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
+    log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
+    log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
+    log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
+    log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
+else: 
+    init_model_error_basis_args = None
+    log.write("False\n\n")
+
+log.write("Temporal Perturbation\n")
+if sim_model_error:
+    log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
+    log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
+    log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
+    log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
+    log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
+    log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
+    log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
+else:
+    sim_model_error_basis_args = None
+    log.write("False\n\n")
+
+log.close()
+
 
 # %%
-from gpuocean.dataassimilation import DataAssimilationUtils as dautils
-observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
-                'nx': grid_args["nx"], 'ny': grid_args["ny"],
-                'domain_size_x': grid_args["nx"]*grid_args["dx"],
-                'domain_size_y': grid_args["ny"]*grid_args["dy"],
-               }
+args = {
+    "nx": grid_args["nx"],
+    "ny": grid_args["ny"],
+    "dx": grid_args["dx"],
+    "dy": grid_args["dy"],
+    "gpu_ctx": gpu_ctx,
+    "gpu_stream": gpu_stream,
+    "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+    }
+
+data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
+
+def makePlots():
+    # mean
+    SL_mean = SLestimate(SL_ensemble, np.mean)
+    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=30*steady_state_bump_a)
+    plt.savefig(output_path+"/MCmean_"+str(int(SL_ensemble[0].t))+".pdf")
+
+    # var
+    SL_var = SLestimate(SL_ensemble, np.var)
+    fig, axs = imshow3var(SL_var, eta_vlim=0.015, huv_vlim=50)
+    plt.savefig(output_path+"/MCvar_"+str(int(SL_ensemble[0].t))+".pdf")
+
+    plt.close('all')
 
 
 # %%
-init_positions = np.array([[500*80, 1000*80],  #[[x1, y1],
-                           [550*80, 1000*80],  # [x2, y2],
-                           [450*80, 1000*80],
-                           [500*80, 1050*80],
-                           [550*80, 1050*80],
-                           [450*80, 1050*80],
-                           [500*80, 1100*80],
-                           [550*80, 1100*80],
-                           [450*80, 1100*80]
-                           ]) 
-
-# %%
-from gpuocean.utils import Observation
-
-
-
-# %%
-num_drifters = len(init_positions)
-from gpuocean.drifters import GPUDrifterCollection
-
+# Ensemble
+SL_ensemble = initSLensemble(Ne, args, data_args, sample_args, 
+                             init_model_error_basis_args=init_model_error_basis_args, 
+                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
 
 # %% 
-# scales = np.array([[ 0.25, 0.0], [ 0.1, 0.0], [ 0.05, 0.0], 
-#                    [ 0.0, 0.01],  [ 0.0, 0.005],  [ 0.0, 0.0025]])
+# DA period
+makePlots()
 
-# for scale in scales:
-#     print(scale)
-#     init_model_error_basis_args["kl_scaling"] = scale[0]
-#     sim_model_error_basis_args["kl_scaling"] = scale[1]
+while SL_ensemble[0].t < T_da:
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 3600)
+    print("Plotting at ", SL_ensemble[0].t)
+    makePlots()
 
-# Bookkeeping
-forecasts = [] 
-init_states = np.zeros((10, 3, grid_args["ny"], grid_args["nx"]))
-final_states = np.zeros((10, 3, grid_args["ny"], grid_args["nx"]))
 
-for n in range(10):
-    print("Experiment ", n)
-    forecast = Observation.Observation(**observation_args)
-    drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
-                                                boundaryConditions = args["boundary_conditions"],
-                                                domain_size_x = forecast.domain_size_x,
-                                                domain_size_y = forecast.domain_size_y)
-
-    # Set up sim
-    sim = make_sim(args, sample_args, data_args)
-    init_mekl.perturbSim(sim)
-    
-    init_states[n] = np.array(sim.download(interior_domain_only=True))
-    
-    sim.setKLModelError(**sim_model_error_basis_args)
-    sim.model_time_step = 60.0
-
-    # DA period
-    sim.dataAssimilationStep(6*3600)
-
-    # Forecast period with drifters
-    drifters.setDrifterPositions(init_positions)
-    sim.attachDrifters(drifters)
-    forecast.add_observation_from_sim(sim)
-
-    for hours in range(6):
-        for obses in range(4):
-            sim.dataAssimilationStep(sim.t + 900)
-            forecast.add_observation_from_sim(sim)
-
-    forecasts.append(forecast)
-
-    final_states[n] = np.array(sim.download(interior_domain_only=True))
-
-# Save MC results
-init_states = np.moveaxis(init_states, 0, -1)
-final_states = np.moveaxis(final_states, 0, -1)
-# np.save("MC/MCinitStates_init_"+"{:.4f}".format(scale[0])[2:]+"_sim_"+"{:.4f}".format(scale[1])[2:]+".npy", init_states)
-np.save("MC/MCinitStates.npy", init_states)
-# np.save("MC/MCfinalStates_init_"+"{:.4f}".format(scale[0])[2:]+"_sim_"+"{:.4f}".format(scale[1])[2:]+".npy", final_states)
-np.save("MC/MCfinalStates.npy", final_states)
-
-fig, ax = plt.subplots(1,1, figsize=(10,10))
-domain_extent = [0, sim.nx*sim.dx/1000, 0, sim.ny*sim.dy/1000]
-
-ax.imshow(np.zeros((grid_args["ny"], grid_args["nx"])), interpolation="none", origin='lower', 
-            cmap=plt.cm.Oranges, extent=domain_extent, zorder=-10)
-
-for forecast in forecasts:
-    for drifter_id in range(len(init_positions)): 
-        path = forecast.get_drifter_path(drifter_id, 0,  sim.t, in_km = True)[0]
-        ax.plot(path[:,0], path[:,1], color="C"+str(drifter_id), ls="-", zorder=-3)
-
-# plt.savefig("MC/MCdrift_init_"+"{:.4f}".format(scale[0])[2:]+"_sim_"+"{:.4f}".format(scale[1])[2:]+".pdf", bbox_inches="tight")
-plt.savefig("MC/MCdrift.pdf", bbox_inches="tight")
+# %%
+# Forecast period
+while SL_ensemble[0].t < T_da + T_forecast:
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 3600)
+    print("Plotting at ", SL_ensemble[0].t)
+    makePlots()
