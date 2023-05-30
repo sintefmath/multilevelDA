@@ -79,14 +79,12 @@ def SLestimate(SL_ensemble, func):
     return func(SL_state, axis=-1)
 
 
-def GCweights(SL_ensemble, Hx, Hy, r):
-    Xs = np.linspace(0, SL_ensemble[0].nx * SL_ensemble[0].dx, SL_ensemble[0].nx)
-    Ys = np.linspace(0, SL_ensemble[0].ny * SL_ensemble[0].dy, SL_ensemble[0].ny)
+def GCweights(SL_ensemble, obs_x, obs_y, r):
+    Xs = np.linspace(0.5*SL_ensemble[0].dx, (SL_ensemble[0].nx-0.5) * SL_ensemble[0].dx, SL_ensemble[0].nx)
+    Ys = np.linspace(0.5*SL_ensemble[0].dy, (SL_ensemble[0].ny-0.5) * SL_ensemble[0].dy, SL_ensemble[0].ny)
     X, Y = np.meshgrid(Xs, Ys)
 
-    obs_loc = np.zeros(2)
-    obs_loc[0] = X[0,Hx]
-    obs_loc[1] = Y[Hy,0]
+    obs_loc = [obs_x, obs_y]
     dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
 
     GC = np.zeros_like(dists)
@@ -101,10 +99,45 @@ def GCweights(SL_ensemble, Hx, Hy, r):
     return GC
 
 
-def SLEnKF(SL_ensemble, obs, Hx, Hy, R, obs_var, 
+def SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y):
+
+    if not isinstance(SL_ensemble, list):
+        SL_ensemble = [SL_ensemble]
+
+    Xs = np.linspace(SL_ensemble[0].dx/2, (SL_ensemble[0].nx - 1/2) * SL_ensemble[0].dx, SL_ensemble[0].nx)
+    Ys = np.linspace(SL_ensemble[0].dy/2, (SL_ensemble[0].ny - 1/2) * SL_ensemble[0].dy, SL_ensemble[0].ny)
+
+    Hx = ((Xs - obs_x)**2).argmin()
+    Hy = ((Ys - obs_y)**2).argmin()
+
+    return Hx, Hy
+
+
+
+def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var, 
            relax_factor=1.0, localisation_weights=None,
            return_perts=False, perts=None):
-    
+    """
+    SL_ensemble     - list of CDKLM16 instances
+    obs             - ndarray of size (3,) with truth observation (eta, hu, hv)
+    obs_x           - float for physical observation location
+    obs_y           - float for physical observation location
+    R               - ndarray of size (3,) with observation noise covariance diagonal
+    obs_var         - slice with observed variables
+    relax_factor    - float between 0 and 1
+    location_weights- ndarray of size (ny, nx) otherwise no localisation
+    perts           - ndarray of size (Ne, Ny) - as output
+    """
+
+    # Check that obs_x and obs_y are NOT integer types 
+    # (as this is indicator that those are indices as in earlier implementation)
+    assert not isinstance(obs_x, (np.integer, int)), "This should be physical distance, not index"
+    assert not isinstance(obs_y, (np.integer, int)), "This should be physical distance, not index"
+
+
+    # From observation location to observation indices
+    Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+
     ## Prior
     SL_state = SLdownload(SL_ensemble) 
     SL_Ne = len(SL_ensemble)
