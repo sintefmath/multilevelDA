@@ -49,10 +49,7 @@ from utils.BasinPlot import *
 # ### Collecting Perturbations
 
 # %%
-sample_args = {
-    "g": 9.81,
-    "f": 0.0012,
-    }
+from utils.BasinParameters import *
 
 # %%
 L = 9
@@ -69,36 +66,11 @@ args =  {
     }
 
 # %%
-init_model_error_basis_args = {
-    "basis_x_start": 1, 
-    "basis_x_end": 6,
-    "basis_y_start": 2,
-    "basis_y_end": 7,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.18,
-}
-
-# %%
-
 init_mekl =  ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args, gpu_stream=gpu_stream)
 
-# %%
-
-sim_model_error_basis_args = {
-    "basis_x_start": 1, 
-    "basis_x_end": 7,
-    "basis_y_start": 2,
-    "basis_y_end": 8,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.004
-}
-
-
 
 # %%
-data_args = make_init_steady_state(args, a=3, bump_fractal_dist=7)
+data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
 # %% [markdown]
 # ### Monte Carlo Drifters
@@ -161,7 +133,7 @@ for n in range(10):
     init_states[n] = np.array(sim.download(interior_domain_only=True))
     
     sim.setKLModelError(**sim_model_error_basis_args)
-    sim.model_time_step = 60.0
+    sim.model_time_step = sim_model_error_timestep
 
     # DA period
     sim.dataAssimilationStep(6*3600)
