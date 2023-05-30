@@ -163,7 +163,7 @@ data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dis
 def makePlots():
     # mean
     SL_mean = SLestimate(SL_ensemble, np.mean)
-    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=30*steady_state_bump_a)
+    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=100)
     plt.savefig(output_path+"/MCmean_"+str(int(SL_ensemble[0].t))+".pdf")
 
     # var
