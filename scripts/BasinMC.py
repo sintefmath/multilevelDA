@@ -20,11 +20,20 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "MC/" 
+output_path = "MC/"+timestamp
 os.makedirs(output_path, exist_ok=True)
 
 log = open(output_path+"/log.txt", 'w')
 log.write("Parameters for the experimental set-up\n\n")
+
+gpuocean_path = [p[:-4] for p in sys.path if (p.endswith("gpuocean/src") or p.endswith("gpuocean\\src"))][0]
+import git
+gpuocean_repo = git.Repo(gpuocean_path)
+log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
+
+repo = git.Repo(search_parent_directories=True)
+log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
+
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -50,57 +59,17 @@ gpu_stream = cuda.Stream()
 L = 9
 
 # %% 
-sample_args = {
-    "g": 9.81,
-    "f": 0.0012,
-    }
-
-# %%
-steady_state_bump_a = 3
-steady_state_bump_fractal_dist = 7
-
-# %% 
-init_model_error_basis_args = {
-    "basis_x_start": 1, 
-    "basis_x_end": 6,
-    "basis_y_start": 2,
-    "basis_y_end": 7,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.18,
-}
-
-# %% 
-sim_model_error_basis_args = {
-    "basis_x_start": 2, 
-    "basis_x_end": 7,
-    "basis_y_start": 3,
-    "basis_y_end": 8,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.004,
-}
+from utils.BasinParameters import *
 
 # %% 
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=100)
-parser.add_argument('--Tda', type=float, default=6*3600)
-parser.add_argument('--Tforecast', type=float, default=6*3600)
-parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=60) 
 
 pargs = parser.parse_args()
 
 Ne = pargs.Ne
-T_da = pargs.Tda
-T_forecast = pargs.Tforecast
-init_model_error = bool(pargs.init_error)
-sim_model_error = bool(pargs.sim_error)
-sim_model_error_timestep = pargs.sim_error_timestep
-
 
 # %%
 # Book keeping
@@ -120,29 +89,22 @@ log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n"
 
 
 log.write("Init Perturbation\n")
-if init_model_error:
-    log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
-    log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
-    log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
-    log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
-    log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
-    log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
-else: 
-    init_model_error_basis_args = None
-    log.write("False\n\n")
+log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
+log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
+log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
+log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
+log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
+log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
+
 
 log.write("Temporal Perturbation\n")
-if sim_model_error:
-    log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
-    log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
-    log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
-    log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
-    log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
-    log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
-    log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
-else:
-    sim_model_error_basis_args = None
-    log.write("False\n\n")
+log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
+log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
+log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
+log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
+log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
+log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
+log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
 
 log.close()
 
@@ -190,9 +152,63 @@ while SL_ensemble[0].t < T_da:
     makePlots()
 
 
+# %% 
+# Prepare drifters
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.utils import Observation
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
+                'nx': grid_args["nx"], 'ny': grid_args["ny"],
+                'domain_size_x': grid_args["nx"]*grid_args["dx"],
+                'domain_size_y': grid_args["ny"]*grid_args["dy"],
+               }
+
+init_positions = np.array([[500*80, 1000*80],  #[[x1, y1],
+                           [550*80, 1000*80],  # [x2, y2],
+                           [450*80, 1000*80],
+                           [500*80, 1050*80],
+                           [550*80, 1050*80],
+                           [450*80, 1050*80],
+                           [500*80, 1100*80],
+                           [550*80, 1100*80],
+                           [450*80, 1100*80]
+                           ]) 
+num_drifters = len(init_positions)
+
+forecasts = []
+for e in range(len(SL_ensemble)):
+    forecast = Observation.Observation(**observation_args)
+    drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
+                                            boundaryConditions = args["boundary_conditions"],
+                                            domain_size_x = forecast.domain_size_x,
+                                            domain_size_y = forecast.domain_size_y)
+    drifters.setDrifterPositions(init_positions)
+    SL_ensemble[e].attachDrifters(drifters)
+    forecast.add_observation_from_sim(SL_ensemble[0])
+    forecasts.append(forecast)
+
+
 # %%
 # Forecast period
 while SL_ensemble[0].t < T_da + T_forecast:
-    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 3600)
-    print("Plotting at ", SL_ensemble[0].t)
-    makePlots()
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 300.0)
+    for e in range(len(SL_ensemble)):
+        forecasts[e].add_observation_from_sim(SL_ensemble[e])
+    if SL_ensemble[0].t % 3600 < 0.1:
+        print("Plotting at ", SL_ensemble[0].t)
+        makePlots()
+
+# %%
+for drifter_id in range(len(init_positions)): 
+    fig, ax = plt.subplots(1,1, figsize=(10,10))
+    domain_extent = [0, SL_ensemble[0].nx*SL_ensemble[0].dx/1000, 0, SL_ensemble[0].ny*SL_ensemble[0].dy/1000]
+
+    ax.imshow(np.zeros((grid_args["ny"], grid_args["nx"])), interpolation="none", origin='lower', 
+                cmap=plt.cm.Oranges, extent=domain_extent, zorder=-10)
+
+    for forecast in forecasts:
+        path = forecast.get_drifter_path(drifter_id, 0,  SL_ensemble[0].t, in_km = True)[0]
+        ax.plot(path[:,0], path[:,1], color="C"+str(drifter_id), ls="-", zorder=-3)
+
+    plt.savefig(output_path+"/drift_"+str(drifter_id)+".pdf", bbox_inches="tight")
+
