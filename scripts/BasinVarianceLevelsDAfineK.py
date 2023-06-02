@@ -17,6 +17,11 @@ from matplotlib import pyplot as plt
 import pycuda.driver as cuda
 
 # %%
+# import time
+# print("Gonna sleep now!")
+# time.sleep(12*3600) # Sleep for 3 seconds
+
+# %%
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
@@ -80,21 +85,49 @@ from utils.BasinParameters import *
 # %% 
 Ts = [0, 15*60, 3600, 6*3600, 12*3600]
 
+#debug:
+# Ts = [0, 15*60, 3600, 2*3600]
+# T_da = 3600
+# T_forecast = 3600
+
 # %% 
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Nvar', type=int, default=2)
 parser.add_argument('--Ne', type=int, default=100)
 
 pargs = parser.parse_args()
 
 Ne = pargs.Ne
-N_var = pargs.Nvar
 
 # %%
 localisation = True
 
+# %% 
+def g_functional(SL_ensemble):
+    """
+    L_g functional as in notation of Kjetil's PhD thesis.
+    This should be the functional that is under investigation for the variance level plot
+
+    Returns a ndarray of same size as SL_ensemble (3, ny, nx, Ne)
+    """
+    return (SLdownload(SL_ensemble) - SLestimate(SL_ensemble, np.mean)[:,:,:,np.newaxis])**2
+
+
+def L2norm(field, lvl_grid_args):
+    """
+    integral_D(f dx)
+    where D are uniform finite volumes
+
+    Input:
+    field           - ndarray of shape (3,ny,nx,..)
+    lvl_grid_args   - dict with nx, ny and dx, dy information
+
+    Output:
+    L2norm          - ndarray of shape (3,...)
+    """
+    # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
+    return np.sqrt(np.sum((field)**2 * lvl_grid_args["dx"]*lvl_grid_args["dy"], axis=(1,2)))
 
 # %%
 # Book keeping
@@ -139,24 +172,15 @@ log.write("DA time steps: " + str(da_timestep) + "\n")
 if localisation:
     log.write("r = " +str(r) + "\n")
 
-log.write("\nStatistics\n")
-log.write("N = " + str(N_var) + "\n")
 
+log.write("\nStatistics\n")
+log.write("g(u) = (u-E[u])^2\n")
+log.write("norm: L2")
 log.close()
 
-# %% 
-def g_functional(SL_ensemble):
-    """
-    L_g functional as in notation of Kjetil's PhD thesis.
-    This should be the functional that is under investigation for the variance level plot
-
-    Returns a ndarray of same size as SL_ensemble (3, ny, nx, Ne)
-    """
-    return (SLdownload(SL_ensemble) - SLestimate(SL_ensemble, np.mean)[:,:,:,np.newaxis])**2
-
 
 # %% 
-varsNs = np.zeros((N_var, 3))
+varsNs = np.zeros((3))
 varsTs = [copy.deepcopy(varsNs) for T in Ts]
 lvlvarsTs = [copy.deepcopy(varsTs) for l in ls]
 
@@ -217,15 +241,15 @@ for l_idx in range(1,len(ls)):
 for e in range(Ne):
     sim = CDKLM16.CDKLM16(**sim_args_list[0]) 
     init_mekls[0].perturbSim(sim)
-    sim.model_error = sim_mekls[0]
-    sim.model_time_step = sim_model_error_timestep
+    # sim.model_error = sim_mekls[0]
+    # sim.model_time_step = sim_model_error_timestep
     SL_ensembles[0].append( sim )
 
     for l_idx in range(1, len(ls)):    
         sim = CDKLM16.CDKLM16(**sim_args_list[l_idx]) 
         init_mekls[l_idx].perturbSimSimilarAs(sim, modelError=init_mekls[0])
-        sim.model_error = sim_mekls[l_idx]
-        sim.model_time_step = sim_model_error_timestep
+        # sim.model_error = sim_mekls[l_idx]
+        # sim.model_time_step = sim_model_error_timestep
         SL_ensembles[l_idx].append( sim )
 
 # %%
@@ -235,87 +259,32 @@ if localisation:
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         localisation_weights_list[h] = GCweights(SL_ensembles[-1], obs_x, obs_y, r) 
 
-# %%
-##########################
-# loop over samples
-for n in range(N_var): 
 
-    # New Truth
-    truth.upload(data_args_list[l_idx]["eta"], data_args_list[l_idx]["hu"], data_args_list[l_idx]["hv"])
-    truth.t = 0.0
-    truth_init_mekl.perturbSim(truth)
+# loop over time
+t_now = 0.0
+for t_idx, T in enumerate(Ts):
 
-    # New Ensemble
-    for e in range(Ne):
-        SL_ensembles[0][e].upload(data_args_list[0]["eta"], data_args_list[0]["hu"], data_args_list[0]["hv"])
-        SL_ensembles[0][e].t = 0.0
-        init_mekls[0].perturbSim(SL_ensembles[0][e])
+    numDAsteps = int((np.minimum(T, T_da + T_forecast)-t_now)/da_timestep)
+    for DAstep in range(numDAsteps):
+        
+        # Forward step
+        truth.dataAssimilationStep(t_now + da_timestep)
 
-        for l_idx in range(1, len(ls)):    
-            SL_ensembles[l_idx][e].upload(data_args_list[l_idx]["eta"], data_args_list[l_idx]["hu"], data_args_list[l_idx]["hv"])
-            SL_ensembles[l_idx][e].t = 0.0
-            init_mekls[l_idx].perturbSimSimilarAs(SL_ensembles[l_idx][e], modelError=init_mekls[0])
-            
-    ##########################
-    # loop over time
-    t_now = 0.0
-    for t_idx, T in enumerate(Ts):
+        numTsteps = int(da_timestep/sim_model_error_timestep) 
+        for Tstep in range(numTsteps):
+            for e in range(Ne):
+                SL_ensembles[0][e].step(sim_model_error_timestep, apply_stochastic_term=False)
+                sim_mekls[0].perturbSim(SL_ensembles[0][e])
+                for l_idx in range(1, len(ls)):
+                    SL_ensembles[l_idx][e].step(sim_model_error_timestep, apply_stochastic_term=False)
+                    sim_mekls[l_idx].perturbSimSimilarAs(SL_ensembles[l_idx][e], modelError=sim_mekls[0])
 
-        numDAsteps = int((np.minimum(T, T_da + T_forecast)-t_now)/da_timestep)
-        for DAstep in range(numDAsteps):
-            
-            # Forward step
-            truth.dataAssimilationStep(t_now + da_timestep)
+            t_now = t_now + sim_model_error_timestep
+            print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ": ", t_now)
 
-            numTsteps = int(da_timestep/sim_model_error_timestep) 
-            for Tstep in range(numTsteps):
-                for e in range(Ne):
-                    SL_ensembles[0][e].step(sim_model_error_timestep)
-                    sim_mekls[0].perturbSim(SL_ensembles[0][e])
-                    for l_idx in range(1, len(ls)):
-                        SL_ensembles[l_idx][e].step(sim_model_error_timestep)
-                        sim_mekls[l_idx].perturbSimSimilarAs(SL_ensembles[l_idx][e], modelError=sim_mekls[0])
-
-                t_now = t_now + sim_model_error_timestep
-                print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ": ", t_now)
-
-            # Update step
-            if DAstep < numDAsteps-1 and truth.t <= T_da:
-                true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-                for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-                    Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
-                    obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
-
-                    SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
-                            relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
-                            return_perts=True)
-
-                    for l_idx in range(len(ls)-1):
-                        # Update l ensemble
-                        lvlHx, lvlHy = SLobsCoord2obsIdx(SL_ensembles[l_idx], obs_x, obs_y)
-                        coarse_SL_K = block_reduce(SL_K, block_size=(1,2**(len(ls)-1-l_idx),2**(len(ls)-1-l_idx),1), func=np.mean)
-
-                        coarse_SL_state = SLdownload(SL_ensembles[l_idx])
-                        coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,lvlHy,lvlHx] - SL_perts.T))
-                        SLupload(SL_ensembles[l_idx], coarse_SL_state)
-  
-
-        print("Saving estimator variance at t=" + str(truth.t))
-        for l_idx in range(1,len(ls)):
-            lvlvarsTs[l_idx][t_idx][n] = np.mean(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), axis=(1,2))
-
-            center_N = int(args_list[l_idx]["nx"]/4)
-            center_x = int(args_list[l_idx]["nx"]/2)
-            center_y = int(args_list[l_idx]["ny"]/2)
-            center_lvlvarsTs[l_idx][t_idx][n] = np.mean(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), axis=(1,2))
-                
-            if l_idx > 0:
-                difflvlvarsTs[l_idx-1][t_idx][n] = np.mean(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2), axis=-1), axis=(1,2))
-                center_difflvlvarsTs[l_idx-1][t_idx][n] = np.mean(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), axis=(1,2))
-
-
-        # Remaining Update step
-        if truth.t <= T_da:
+        # Update step
+        if DAstep < numDAsteps-1 and truth.t <= T_da:
+            print("DA at " + str(truth.t))
             true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
             for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                 Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
@@ -335,18 +304,53 @@ for n in range(N_var):
                     SLupload(SL_ensembles[l_idx], coarse_SL_state)
 
 
+    print("Saving estimator variance at t=" + str(truth.t))
+    for l_idx in range(len(ls)):
+        lvlvarsTs[l_idx][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), args_list[l_idx])
+
+        center_N = int(args_list[l_idx]["nx"]/4)
+        center_x = int(args_list[l_idx]["nx"]/2)
+        center_y = int(args_list[l_idx]["ny"]/2)
+        center_lvlvarsTs[l_idx][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+            
+        if l_idx > 0:
+            difflvlvarsTs[l_idx-1][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2), axis=-1), args_list[l_idx])
+            center_difflvlvarsTs[l_idx-1][t_idx] = L2norm(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+
+    # Remaining Update step
+    if T>0 and truth.t <= T_da:
+        print("DA at " + str(truth.t))
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+        for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
+            Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+
+            SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
+                    relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
+                    return_perts=True)
+
+            for l_idx in range(len(ls)-1):
+                # Update l ensemble
+                lvlHx, lvlHy = SLobsCoord2obsIdx(SL_ensembles[l_idx], obs_x, obs_y)
+                coarse_SL_K = block_reduce(SL_K, block_size=(1,2**(len(ls)-1-l_idx),2**(len(ls)-1-l_idx),1), func=np.mean)
+
+                coarse_SL_state = SLdownload(SL_ensembles[l_idx])
+                coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,lvlHy,lvlHx] - SL_perts.T))
+                SLupload(SL_ensembles[l_idx], coarse_SL_state)
+
+
 # %% 
 for t_idx, T in enumerate(Ts):
-    varsT = [np.mean(lvlvarsTs[l_idx][t_idx], axis=0) for l_idx in range(len(ls))]
+    varsT = [lvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls))]
     np.save(output_path+"/vars_"+str(T), np.array(varsT))
 
-    diff_varsT = [np.mean(difflvlvarsTs[l_idx][t_idx], axis=0) for l_idx in range(len(ls)-1)]
+    diff_varsT = [difflvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls)-1)]
     np.save(output_path+"/diff_vars_"+str(T), np.array(diff_varsT))
 
-    center_varsT = [np.mean(center_lvlvarsTs[l_idx][t_idx], axis=0) for l_idx in range(len(ls))]
+    center_varsT = [center_lvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls))]
     np.save(output_path+"/center_vars_"+str(T), np.array(center_varsT))
 
-    center_diff_varsT = [np.mean(center_difflvlvarsTs[l_idx][t_idx], axis=0) for l_idx in range(len(ls)-1)]
+    center_diff_varsT = [center_difflvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls)-1)]
     np.save(output_path+"/center_diff_vars_"+str(T), np.array(center_diff_varsT))
 
     
