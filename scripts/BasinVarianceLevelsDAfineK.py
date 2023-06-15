@@ -101,7 +101,7 @@ pargs = parser.parse_args()
 Ne = pargs.Ne
 
 # %%
-localisation = True
+localisation = False#True
 
 # %% 
 def g_functional(SL_ensemble):
@@ -128,6 +128,24 @@ def L2norm(field, lvl_grid_args):
     """
     # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
     return np.sqrt(np.sum((field)**2 * lvl_grid_args["dx"]*lvl_grid_args["dy"], axis=(1,2)))
+
+
+def L1norm(field, lvl_grid_args):
+    """
+    integral_D(f dx)
+    where D are uniform finite volumes
+
+    Input:
+    field           - ndarray of shape (3,ny,nx,..)
+    lvl_grid_args   - dict with nx, ny and dx, dy information
+
+    Output:
+    L1norm          - ndarray of shape (3,...)
+    """
+    # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
+    return np.sum(np.abs(field) * lvl_grid_args["dx"]*lvl_grid_args["dy"], axis=(1,2))
+
+norm = L1norm
 
 # %%
 # Book keeping
@@ -174,8 +192,9 @@ if localisation:
 
 
 log.write("\nStatistics\n")
+log.write("Ne = " +str(Ne)+"\n")
 log.write("g(u) = (u-E[u])^2\n")
-log.write("norm: L2")
+log.write("norm = L2\n")
 log.close()
 
 
@@ -306,16 +325,16 @@ for t_idx, T in enumerate(Ts):
 
     print("Saving estimator variance at t=" + str(truth.t))
     for l_idx in range(len(ls)):
-        lvlvarsTs[l_idx][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), args_list[l_idx])
+        lvlvarsTs[l_idx][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), args_list[l_idx])
 
         center_N = int(args_list[l_idx]["nx"]/4)
         center_x = int(args_list[l_idx]["nx"]/2)
         center_y = int(args_list[l_idx]["ny"]/2)
-        center_lvlvarsTs[l_idx][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+        center_lvlvarsTs[l_idx][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
             
         if l_idx > 0:
-            difflvlvarsTs[l_idx-1][t_idx] = L2norm(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2), axis=-1), args_list[l_idx])
-            center_difflvlvarsTs[l_idx-1][t_idx] = L2norm(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+            difflvlvarsTs[l_idx-1][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2), axis=-1), args_list[l_idx])
+            center_difflvlvarsTs[l_idx-1][t_idx] = norm(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
 
     # Remaining Update step
     if T>0 and truth.t <= T_da:
