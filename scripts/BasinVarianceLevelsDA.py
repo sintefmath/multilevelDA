@@ -17,6 +17,11 @@ from matplotlib import pyplot as plt
 import pycuda.driver as cuda
 
 # %%
+# import time
+# print("Gonna sleep now!")
+# time.sleep(1*3600)
+
+# %%
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
@@ -33,6 +38,8 @@ log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on 
 
 repo = git.Repo(search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
+
+log.write("Script " + str(os.path.basename(__file__))+ "\n\n")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -54,7 +61,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %%
-ls = [6, 7, 8, 9, 10]
+ls = [6, 7, 8, 9]#, 10]
 
 # %% 
 sample_args = {
@@ -85,13 +92,13 @@ from utils.BasinParameters import *
 ## Set-up statisitcs
 
 # %% 
-Ts = [0, 15*60, 3600, 6*3600, 12*3600]
+Ts = [0, 15*60, 3600, 6*3600]#, 12*3600]
 
 # %% 
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Nvar', type=int, default=2)
+parser.add_argument('--Nvar', type=int, default=1)
 parser.add_argument('--Ne', type=int, default=100)
 
 pargs = parser.parse_args()
@@ -99,15 +106,6 @@ pargs = parser.parse_args()
 Ne = pargs.Ne
 
 N_var = pargs.Nvar
-
-# %% 
-# Truth observation
-Hxs = [ 500,  400,  600,  400,  600]
-Hys = [1000,  900,  900, 1100, 1100]
-# Hxs = [ 250,  200,  300,  200,  300]
-# Hys = [ 500,  450,  450,  550,  550]
-# Hxs = [ 125,  100,  150,  100,  150]
-# Hys = [ 250,  225,  225,  275,  270]
 
 # %% 
 # Assimilation
@@ -152,7 +150,7 @@ log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n
 
 
 log.write("Truth\n")
-log.write("Hx, Hy: " + " / ".join([str(Hx) + ", " + str(Hy)   for Hx, Hy in zip(Hxs,Hys)]) + "\n")
+log.write("obs_x, obs_y: " + " / ".join([str(obs_x) + ", " + str(obs_y)  for obs_x, obs_y in zip(obs_xs,obs_ys)]) + "\n")
 log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
 
 log.write("Assimilation\n")
@@ -276,12 +274,12 @@ for l_idx in range(len(ls)):
 
 
         # Weights
-        localisation_weights_list = len(Hxs)*[None]
+        localisation_weights_list = len(obs_xs)*[None]
         if localisation:
             for o, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                 localisation_weights_list[o] = GCweights(SL_ensemble, obs_x, obs_y, r) 
 
-        coarse_localisation_weights_list = len(Hxs)*[None]
+        coarse_localisation_weights_list = len(obs_xs)*[None]
         if localisation:
             for o, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                 coarse_localisation_weights_list[o] = GCweights(coarse_SL_ensemble, obs_x, obs_y, r) 
@@ -306,7 +304,7 @@ for l_idx in range(len(ls)):
                 # Update step
                 if step < numDAsteps-1 and truth.t <= T_da:
                     true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-                    for o, [obs_x, obs_y] in enumerate(obs_xs, obs_ys):
+                    for o, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                         Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
                         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
@@ -342,7 +340,7 @@ for l_idx in range(len(ls)):
 
             if truth.t <= T_da:
                 true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-                for o, [obs_x, obs_y] in enumerate(obs_xs, obs_ys):
+                for o, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                     Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
                     obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
@@ -359,10 +357,13 @@ for l_idx in range(len(ls)):
                         coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,lvlHy,lvlHx] - SL_perts.T))
                         SLupload(coarse_SL_ensemble, coarse_SL_state)
 
-                        # SL_K = SLEnKF(coarse_SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=obs_var, 
+                        # SL_K = SLEddnKF(coarse_SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=obs_var, 
                         #     relax_factor=relax_factor, localisation_weights=coarse_localisation_weights_list[o],
                         #     perts=SL_perts)
 
+            np.save(output_path+"/SLensemble_"+str(l_idx)+"_"+str(T)+".npy", SLdownload(SL_ensemble))
+            if l_idx > 0:
+                np.save(output_path+"/SLensemble_"+str(l_idx)+"coarse_"+str(T)+".npy", SLdownload(coarse_SL_ensemble))
 
 # %% 
 for t_idx, T in enumerate(Ts):
