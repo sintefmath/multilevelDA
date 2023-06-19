@@ -19,7 +19,7 @@ import pycuda.driver as cuda
 # %%
 # import time
 # print("Gonna sleep now!")
-# time.sleep(12*3600) # Sleep for 3 seconds
+# time.sleep(3*3600)
 
 # %%
 import datetime
@@ -38,6 +38,11 @@ log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on 
 
 repo = git.Repo(search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
+
+log.write("Script " + str(os.path.basename(__file__))+ "\n\n")
+
+import shutil
+shutil.copy(__file__, output_path + os.sep + "script_copy.py")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -145,7 +150,24 @@ def L1norm(field, lvl_grid_args):
     # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
     return np.sum(np.abs(field) * lvl_grid_args["dx"]*lvl_grid_args["dy"], axis=(1,2))
 
-norm = L1norm
+
+def Enorm(field, lvl_grid_args):
+    """
+    integral_D(f dx)
+    where D are uniform finite volumes
+
+    Input:
+    field           - ndarray of shape (3,ny,nx,..)
+    lvl_grid_args   - dict with nx, ny and dx, dy information
+
+    Output:
+    L1norm          - ndarray of shape (3,...)
+    """
+    # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
+    return np.mean(field, axis=(1,2))
+
+
+norm = Enorm
 
 # %%
 # Book keeping
@@ -194,7 +216,7 @@ if localisation:
 log.write("\nStatistics\n")
 log.write("Ne = " +str(Ne)+"\n")
 log.write("g(u) = (u-E[u])^2\n")
-log.write("norm = L2\n")
+log.write("norm = "+ str(norm.__name__) + "\n")
 log.close()
 
 
@@ -260,16 +282,15 @@ for l_idx in range(1,len(ls)):
 for e in range(Ne):
     sim = CDKLM16.CDKLM16(**sim_args_list[0]) 
     init_mekls[0].perturbSim(sim)
-    # sim.model_error = sim_mekls[0]
-    # sim.model_time_step = sim_model_error_timestep
     SL_ensembles[0].append( sim )
 
     for l_idx in range(1, len(ls)):    
         sim = CDKLM16.CDKLM16(**sim_args_list[l_idx]) 
         init_mekls[l_idx].perturbSimSimilarAs(sim, modelError=init_mekls[0])
-        # sim.model_error = sim_mekls[l_idx]
-        # sim.model_time_step = sim_model_error_timestep
         SL_ensembles[l_idx].append( sim )
+
+for l_idx in range(len(ls)):
+        np.save(output_path+"/SLensemble_"+str(l_idx)+"_init.npy", SLdownload(SL_ensembles[l_idx]))
 
 # %%
 # Weights
@@ -358,6 +379,9 @@ for t_idx, T in enumerate(Ts):
                 SLupload(SL_ensembles[l_idx], coarse_SL_state)
 
 
+    for l_idx in range(len(ls)):
+        np.save(output_path+"/SLensemble_"+str(l_idx)+"_"+str(T)+".npy", SLdownload(SL_ensembles[l_idx]))
+
 # %% 
 for t_idx, T in enumerate(Ts):
     varsT = [lvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls))]
@@ -372,4 +396,3 @@ for t_idx, T in enumerate(Ts):
     center_diff_varsT = [center_difflvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls)-1)]
     np.save(output_path+"/center_diff_vars_"+str(T), np.array(center_diff_varsT))
 
-    
