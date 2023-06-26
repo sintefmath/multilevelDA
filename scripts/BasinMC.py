@@ -130,7 +130,7 @@ def makePlots():
 
     # var
     SL_var = SLestimate(SL_ensemble, np.var)
-    fig, axs = imshow3var(SL_var, eta_vlim=0.015, huv_vlim=50)
+    fig, axs = imshow3var(SL_var, eta_vlim=0.025, huv_vlim=100)
     plt.savefig(output_path+"/MCvar_"+str(int(SL_ensemble[0].t))+".pdf")
 
     plt.close('all')

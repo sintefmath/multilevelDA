@@ -50,58 +50,7 @@ gpu_stream = cuda.Stream()
 L = 9
 
 # %% 
-sample_args = {
-    "g": 9.81,
-    "f": 0.0012,
-    }
-
-
-# %% 
-init_model_error_basis_args = {
-    "basis_x_start": 1, 
-    "basis_x_end": 6,
-    "basis_y_start": 2,
-    "basis_y_end": 7,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.18,
-}
-
-# %% 
-sim_model_error_basis_args = {
-    "basis_x_start": 1, 
-    "basis_x_end": 7,
-    "basis_y_start": 2,
-    "basis_y_end": 8,
-
-    "kl_decay": 1.25,
-    "kl_scaling": 0.004,
-}
-
-
-# %% 
-# Flags for model error
-import argparse
-parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Tda', type=float, default=6*3600)
-parser.add_argument('--Tforecast', type=float, default=6*3600)
-parser.add_argument('--init_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error', type=int, default=1,choices=[0,1])
-parser.add_argument('--sim_error_timestep', type=float, default=60) 
-
-pargs = parser.parse_args()
-
-T_da = pargs.Tda
-T_forecast = pargs.Tforecast
-init_model_error = bool(pargs.init_error)
-sim_model_error = bool(pargs.sim_error)
-sim_model_error_timestep = pargs.sim_error_timestep
-
-# T_da = 6*3600
-# T_forecast = 6*3600
-# init_model_error = False
-# sim_model_error = True
-# sim_model_error_timestep = 60.0
+from utils.BasinParameters import *
 
 # %%
 # Book keeping
@@ -114,32 +63,26 @@ log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
 
 log.write("Init State\n")
-log.write("Double Bump\n\n")
+log.write("Double Bump\n")
+log.write("Bump size [m]: " + str(steady_state_bump_a) +"\n")
+log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n")
 
 log.write("Init Perturbation\n")
-if init_model_error:
-    log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
-    log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
-    log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
-    log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
-    log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
-    log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
-else: 
-    init_model_error_basis_args = None
-    log.write("False\n\n")
+log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
+log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
+log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
+log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
+log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
+log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
 
 log.write("Temporal Perturbation\n")
-if sim_model_error:
-    log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
-    log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
-    log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
-    log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
-    log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
-    log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
-    log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
-else:
-    sim_model_error_basis_args = None
-    log.write("False\n\n")
+log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
+log.write("KL bases x start: " + str(sim_model_error_basis_args["basis_x_start"]) + "\n")
+log.write("KL bases x end: " + str(sim_model_error_basis_args["basis_x_end"]) + "\n")
+log.write("KL bases y start: " + str(sim_model_error_basis_args["basis_y_start"]) + "\n")
+log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + "\n")
+log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
+log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
 
 log.close()
 
@@ -161,15 +104,13 @@ args = {
     "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
     }
 
-data_args = make_init_steady_state(args)
+data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
 # %% 
 # Truth
-if init_model_error:
-    init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
+init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
 
-if sim_model_error:
-    sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
+sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
 
 sim_args = {
     "gpu_ctx" : args["gpu_ctx"],
@@ -189,11 +130,9 @@ sim_args = {
 }
 
 truth = CDKLM16.CDKLM16(**sim_args) 
-if init_model_error:
-    init_mekl.perturbSim(truth)
-if sim_model_error:
-    truth.model_error = sim_mekl
-    truth.model_time_step = sim_model_error_timestep
+init_mekl.perturbSim(truth)
+truth.model_error = sim_mekl
+truth.model_time_step = sim_model_error_timestep
 
 
 
@@ -201,7 +140,7 @@ if sim_model_error:
 # DA period
 write2file(int(truth.t))
 
-while truth.t < T_da + T_forecast:
+while truth.t < T_da:
     # Forward step
     truth.dataAssimilationStep(truth.t+300)
 
@@ -212,3 +151,42 @@ while truth.t < T_da + T_forecast:
     plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
     plt.close("all")
 
+
+# %%
+# Prepare drifters
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.utils import Observation
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
+                'nx': grid_args["nx"], 'ny': grid_args["ny"],
+                'domain_size_x': grid_args["nx"]*grid_args["dx"],
+                'domain_size_y': grid_args["ny"]*grid_args["dy"],
+               }
+
+num_drifters = len(init_positions)
+
+
+forecast = Observation.Observation(**observation_args)
+drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
+                                        boundaryConditions = args["boundary_conditions"],
+                                        domain_size_x = forecast.domain_size_x,
+                                        domain_size_y = forecast.domain_size_y)
+drifters.setDrifterPositions(init_positions)
+truth.attachDrifters(drifters)
+forecast.add_observation_from_sim(truth)
+
+# %% 
+while truth.t < T_da + T_forecast:
+    # Forward step
+    truth.dataAssimilationStep(truth.t+300)
+    forecast.add_observation_from_sim(truth)
+
+    # DA step
+    write2file(int(truth.t))
+
+    imshowSim(truth)
+    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
+    plt.close("all")
+
+# %% 
+forecast.to_pickle(output_path+"/truth_trajectories.pickle")

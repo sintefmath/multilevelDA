@@ -31,7 +31,7 @@ sim_model_error_basis_args = {
     "basis_y_end": 8,
 
     "kl_decay": 1.25,
-    "kl_scaling": 0.004,
+    "kl_scaling": 0.01,
 }
 
 sim_model_error_timestep=60.0
@@ -41,8 +41,10 @@ T_da = 6*3600
 T_forecast = 6*3600
 
 # Parameters for truth obervation
-obs_xs = [40040.0]
-obs_ys = [80040.0]
+# obs_xs = [40040.0]
+# obs_ys = [80040.0]
+obs_xs = [40040.0, 30040.0, 30040.0, 50040.0, 50040.0]
+obs_ys = [80040.0, 70040.0, 90040.0, 70040.0, 90040.0]
 
 R = [0.05, 1.0, 1.0]
 
@@ -54,3 +56,14 @@ min_location_level = 0
 
 da_timestep = 900
 
+# Drifters
+init_positions = [[500*80, 1000*80],    #[[x1, y1],
+                    [550*80, 1000*80],  # [x2, y2],
+                    [450*80, 1000*80],
+                    [500*80, 1050*80],
+                    [550*80, 1050*80],
+                    [450*80, 1050*80],
+                    [500*80, 1100*80],
+                    [550*80, 1100*80],
+                    [450*80, 1100*80]
+                    ]

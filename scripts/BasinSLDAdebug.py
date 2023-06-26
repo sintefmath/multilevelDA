@@ -65,7 +65,7 @@ from utils.BasinParameters import *
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=100)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-06-22T13_23_51")
 
 pargs = parser.parse_args()
 
@@ -158,18 +158,18 @@ data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dis
 
 # %% 
 def makeTruePlots(truth):
-    fig, axs = imshowSim(truth, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
+    fig, axs = imshowSim(truth, eta_vlim=steady_state_bump_a, huv_vlim=100)
     plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
 
 def makePlots(SL_K):
     # mean
     SL_mean = SLestimate(SL_ensemble, np.mean)
-    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=25*steady_state_bump_a)
+    fig, axs = imshow3(SL_mean, eta_vlim=steady_state_bump_a, huv_vlim=100)
     plt.savefig(output_path+"/SLmean_"+str(int(SL_ensemble[0].t))+".pdf")
 
     # var
     SL_var = SLestimate(SL_ensemble, np.var)
-    fig, axs = imshow3var(SL_var, eta_vlim=0.015, huv_vlim=50)
+    fig, axs = imshow3var(SL_var, eta_vlim=0.025, huv_vlim=100)
     plt.savefig(output_path+"/SLvar_"+str(int(SL_ensemble[0].t))+".pdf")
 
     # Kalman gain
@@ -263,16 +263,6 @@ observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
                 'domain_size_y': grid_args["ny"]*grid_args["dy"],
                }
 
-init_positions = np.array([[500*80, 1000*80],  #[[x1, y1],
-                           [550*80, 1000*80],  # [x2, y2],
-                           [450*80, 1000*80],
-                           [500*80, 1050*80],
-                           [550*80, 1050*80],
-                           [450*80, 1050*80],
-                           [500*80, 1100*80],
-                           [550*80, 1100*80],
-                           [450*80, 1100*80]
-                           ]) 
 num_drifters = len(init_positions)
 
 forecasts = []
