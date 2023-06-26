@@ -6,25 +6,25 @@ from skimage.measure import block_reduce
 
 class Analysis:
 
-    def __init__(self, data_args_list, vars, diff_vars):
+    def __init__(self, grid_args_list, vars, diff_vars):
         """
         data_args_list: list of level information. Required keys: dx, dy, nx, ny
         vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         diff_vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
         """
         
-        self.dxs = [data_args["dx"] for data_args in data_args_list]
-        self.dys = [data_args["dy"] for data_args in data_args_list]
+        self.dxs = [grid_args["dx"] for grid_args in grid_args_list]
+        self.dys = [grid_args["dy"] for grid_args in grid_args_list]
 
-        self.nxs = [data_args["nx"] for data_args in data_args_list]
-        self.nys = [data_args["ny"] for data_args in data_args_list]
+        self.nxs = [grid_args["nx"] for grid_args in grid_args_list]
+        self.nys = [grid_args["ny"] for grid_args in grid_args_list]
 
 
         self.vars = vars
         if isinstance(vars, str):
             self.vars = np.load(vars)
 
-        assert len(data_args_list) == len(self.vars), "Wrong number of levels"
+        assert len(grid_args_list) == len(self.vars), "Wrong number of levels"
 
         
         self.diff_vars = diff_vars
