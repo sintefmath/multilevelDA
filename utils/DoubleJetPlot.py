@@ -20,7 +20,7 @@ def imshow3(etahuhv, negative_vlim=True,  eta_vlim=3, huv_vlim=750, cmap="coolwa
     return fig, axs
 
 
-def imshow3var(est_var, eta_vlim=0.25, huv_vlim=100, title=None):
+def imshow3var(est_var, eta_vlim=0.5, huv_vlim=100, title=None):
     return imshow3(est_var, negative_vlim=False, eta_vlim=eta_vlim, huv_vlim=huv_vlim, cmap="Reds", title=None)
 
 
