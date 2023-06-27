@@ -63,6 +63,24 @@ L = 9
 # %% 
 from utils.DoubleJetParameters import *
 
+# %%
+from gpuocean.utils import DoubleJetCase
+
+doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
+doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
+
+# %% 
+args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
+args["gpu_stream"] = gpu_stream
+
+data_args = {"eta" : doubleJetCase_init["eta0"],
+             "hu" : doubleJetCase_init["hu0"],
+             "hv" : doubleJetCase_init["hv0"],
+             "Hi" : doubleJetCase_args["H"]}
+
+sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
+
+
 # %% 
 # Flags for model error
 import argparse
@@ -75,7 +93,6 @@ pargs = parser.parse_args()
 Ne = pargs.Ne
 truth_path = pargs.truth_path
 
-
 # %% 
 # Assimilation
 localisation = True
@@ -86,9 +103,8 @@ localisation = True
 log.write("L = " + str(L) + "\n")
 log.write("Ne = " + str(Ne) + "\n\n")
 
-grid_args = initGridSpecs(L)
-log.write("nx = " + str(grid_args["nx"]) + ", ny = " + str(grid_args["ny"])+"\n")
-log.write("dx = " + str(grid_args["dx"]) + ", dy = " + str(grid_args["dy"])+"\n")
+log.write("nx = " + str(args["nx"]) + ", ny = " + str(args["ny"])+"\n")
+log.write("dx = " + str(args["dx"]) + ", dy = " + str(args["dy"])+"\n")
 log.write("T (spinup) = " + str(T_spinup) +"\n")
 log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
@@ -107,8 +123,8 @@ if truth_path != "NEW":
     log.write("from file: " + truth_path + "\n")
 
     truth0 = np.load(truth_path+"/truth_0.npy")
-    assert truth0.shape[1] == grid_args["ny"], "Truth has wrong dimensions"
-    assert truth0.shape[2] == grid_args["nx"], "Truth has wrong dimensions"
+    assert truth0.shape[1] == args["ny"], "Truth has wrong dimensions"
+    assert truth0.shape[2] == args["nx"], "Truth has wrong dimensions"
 else:
     log.write("saved to file\n")
 
@@ -134,24 +150,6 @@ def write2file(T, mode=""):
     SL_state = SLdownload(SL_ensemble)
     np.save(output_path+"/SLensemble_"+str(T)+"_"+mode+".npy", np.array(SL_state))
     
-
-# %%
-from gpuocean.utils import DoubleJetCase
-
-doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
-doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
-
-# %% 
-args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
-args["gpu_stream"] = gpu_stream
-
-data_args = {"eta" : doubleJetCase_init["eta0"],
-             "hu" : doubleJetCase_init["hu0"],
-             "hv" : doubleJetCase_init["hv0"],
-             "Hi" : doubleJetCase_args["H"]}
-
-sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
-
 # %% 
 def makeTruePlots(truth):
     fig, axs = imshowSim(truth)
