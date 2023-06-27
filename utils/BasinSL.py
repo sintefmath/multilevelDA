@@ -2,6 +2,8 @@ from utils.BasinInit import *
 
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
+from scipy.spatial.distance import cdist
+
 #####################################
 # TODO: Implement in framework of `ÒceanModelEnsemble`!
 #
@@ -85,7 +87,23 @@ def GCweights(SL_ensemble, obs_x, obs_y, r):
     X, Y = np.meshgrid(Xs, Ys)
 
     obs_loc = [obs_x, obs_y]
-    dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
+
+    def _calculate_distance(coord1, coord2, xdim, ydim):
+        distx = np.abs(coord1[0] - coord2[0])
+        disty = np.abs(coord1[1] - coord2[1])
+        distx = np.minimum(distx, xdim - distx)
+        disty = np.minimum(disty, ydim - disty)
+        return np.sqrt(distx**2 + disty**2)
+    
+    xdim = SL_ensemble[0].dx * SL_ensemble[0].nx
+    ydim = SL_ensemble[0].dy * SL_ensemble[0].ny
+    
+    grid_coordinates = np.vstack((X.flatten(), Y.flatten())).T
+    dists = cdist(grid_coordinates, np.atleast_2d([obs_x, obs_y]),
+                    lambda u, v: _calculate_distance(u, v, xdim, ydim))
+    dists = dists.reshape(X.shape)
+
+    # dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
 
     GC = np.zeros_like(dists)
     for i in range(dists.shape[0]):
