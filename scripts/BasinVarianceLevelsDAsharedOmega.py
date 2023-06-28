@@ -106,7 +106,7 @@ pargs = parser.parse_args()
 Ne = pargs.Ne
 
 # %%
-localisation = False#True
+localisation = True
 
 # %% 
 def g_functional(SL_ensemble):
@@ -307,6 +307,7 @@ if localisation:
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         localisation_weights_list[h] = GCweights(SL_ensembles[-1], obs_x, obs_y, r) 
 
+
 # %%
 # loop over time
 t_now = 0.0
@@ -344,7 +345,8 @@ for t_idx, T in enumerate(Ts):
     
                 for l_idx in range(len(ls)):
                     SL_K, SL_perts = SLEnKF(SL_ensembles[l_idx], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
-                                            relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
+                                            relax_factor=relax_factor, 
+                                            localisation_weights=block_reduce(localisation_weights_list[h], block_size=(2**(len(ls)-l_idx-1),2**(len(ls)-l_idx-1)), func=np.mean),
                                             return_perts=True)
                     
                     if l_idx > 0:
@@ -378,7 +380,8 @@ for t_idx, T in enumerate(Ts):
   
             for l_idx in range(len(ls)):
                 SL_K, SL_perts = SLEnKF(SL_ensembles[l_idx], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
-                                        relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
+                                        relax_factor=relax_factor, 
+                                        localisation_weights=block_reduce(localisation_weights_list[h], block_size=(2**(len(ls)-l_idx-1),2**(len(ls)-l_idx-1)), func=np.mean),
                                         return_perts=True)
                 
                 if l_idx > 0:
