@@ -220,7 +220,7 @@ for l_idx in range(len(ls)):
 
 
     # Prepare coarse data
-    coarse_grid_args = initGridSpecs(ls[l_idx-1])
+    coarse_grid_args = initGridSpecs(ls[l_idx]-1)
     coarse_args= {
         "nx": coarse_grid_args["nx"],
         "ny": coarse_grid_args["ny"],
@@ -401,7 +401,7 @@ for l_idx in range(len(ls)):
     
 
     # Prepare coarse data
-    coarse_grid_args = initGridSpecs(ls[l_idx-1])
+    coarse_grid_args = initGridSpecs(ls[l_idx]-1)
     coarse_args= {
         "nx": coarse_grid_args["nx"],
         "ny": coarse_grid_args["ny"],
