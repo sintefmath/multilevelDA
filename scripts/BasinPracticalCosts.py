@@ -449,7 +449,7 @@ for l_idx in range(len(ls)):
             coarse_sim.model_time_step = sim_model_error_timestep
 
             ensemble.append(sim)
-            coarse_ensemble.append(sim)
+            coarse_ensemble.append(coarse_sim)
 
         for e in range(Ne):
             ensemble[e].dataAssimilationStep(T_spinup, otherSim=coarse_ensemble[e])
