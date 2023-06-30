@@ -284,10 +284,13 @@ np.save(output_path+"/costsPartnered.npy", costsPartnered)
 # Stepping DA-steps 
 
 # %% 
-Ne = 50
+Nes = np.array([5000, 1000, 500, 100, 50], dtype=int)
 
+N_test = 2
+
+# %%
 log = open(output_path+"/log.txt", 'w')
-log.write("\nNe = " + str(Ne) + "\n")
+log.write("\nNe = " + ", ".join([str(Ne) for Ne in Nes]) + "\n")
 log.close()
 
 # %% 
@@ -331,13 +334,13 @@ for l_idx in range(len(ls)):
 
         sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
         ensemble = []
-        for e in range(Ne):
+        for e in range(Nes[l_idx]):
             sim = CDKLM16.CDKLM16(**sim_args)
             sim.model_error = sim_mekl
             sim.model_time_step = sim_model_error_timestep
             ensemble.append(sim)
 
-        for e in range(Ne):
+        for e in range(Nes[l_idx]):
             ensemble[e].dataAssimilationStep(T_spinup)
         
 
@@ -346,17 +349,17 @@ for l_idx in range(len(ls)):
 
         while ensemble[0].t < T_spinup + T_test:
             t_step = np.minimum(da_timestep, T_spinup + T_test - ensemble[0].t)
-            for e in range(Ne):
+            for e in range(Nes[l_idx]):
                 ensemble[e].dataAssimilationStep(ensemble[e].t + t_step)
 
         gpu_ctx.synchronize()
         toc = time.time()
 
-        costsPureEnsemble[l_idx, n] = (toc-tic)/Ne
+        costsPureEnsemble[l_idx, n] = (toc-tic)/Nes[l_idx]
 
         sim_mekl.cleanUp()
-        for e in range(Ne):
-            ensemble[e].cleanUp()
+        for e in range(Nes[l_idx]):
+            ensemble[e].cleanUp(do_gc=False)
 
 np.save(output_path+"/costsPureEnsemble.npy", costsPureEnsemble)
 
@@ -439,7 +442,7 @@ for l_idx in range(len(ls)):
 
         ensemble = []
         coarse_ensemble = []
-        for e in range(Ne):
+        for e in range(Nes[l_idx]):
             sim = CDKLM16.CDKLM16(**sim_args)
             sim.model_error = sim_mekl
             sim.model_time_step = sim_model_error_timestep
@@ -451,7 +454,8 @@ for l_idx in range(len(ls)):
             ensemble.append(sim)
             coarse_ensemble.append(coarse_sim)
 
-        for e in range(Ne):
+
+        for e in range(Nes[l_idx]):
             ensemble[e].dataAssimilationStep(T_spinup, otherSim=coarse_ensemble[e])
 
         gpu_ctx.synchronize()
@@ -459,18 +463,19 @@ for l_idx in range(len(ls)):
 
         while ensemble[0].t < T_spinup + T_test:
             t_step = np.minimum(da_timestep, T_spinup + T_test - ensemble[0].t)
-            for e in range(Ne):
+            for e in range(Nes[l_idx]):
                 ensemble[e].dataAssimilationStep(ensemble[e].t + t_step, otherSim=coarse_ensemble[e])
 
         gpu_ctx.synchronize()
         toc = time.time()
 
-        costsPartneredEnsemble[l_idx, n] = (toc-tic)/Ne
+        costsPartneredEnsemble[l_idx, n] = (toc-tic)/Nes[l_idx]
 
         sim_mekl.cleanUp()
-        for e in range(Ne):
-            ensemble[e].cleanUp()
-            coarse_ensemble[e].cleanUp()
+        for e in range(Nes[l_idx]):
+            ensemble[e].cleanUp(do_gc=False)
+            coarse_ensemble[e].cleanUp(do_gc=False)
 
 np.save(output_path+"/costsPartneredEnsemble.npy", costsPartneredEnsemble)
 
+# %%

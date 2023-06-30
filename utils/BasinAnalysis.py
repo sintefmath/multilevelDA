@@ -6,7 +6,7 @@ from skimage.measure import block_reduce
 
 class Analysis:
 
-    def __init__(self, grid_args_list, vars, diff_vars):
+    def __init__(self, grid_args_list, vars, diff_vars, works=None, diff_works=None):
         """
         data_args_list: list of level information. Required keys: dx, dy, nx, ny
         vars_file: path to npz as result of `run_LvlVar.py`. ATTENTION: with same ls as given here
@@ -33,6 +33,22 @@ class Analysis:
 
         if len(self.diff_vars) == len(self.vars):
             self.diff_vars = self.diff_vars[1:]
+
+        
+        self.works = works
+        if works is not None:
+            if isinstance(works, str):
+                self.works = np.load(works)
+
+            assert len(grid_args_list) == len(self.works), "Wrong number of levels"
+
+        self.diff_works = diff_works
+        if diff_works is not None:
+            if isinstance(diff_works, str):
+                self.diff_works = np.load(diff_works)
+
+            if len(self.diff_works) == len(self.works):
+                self.diff_works = self.diff_works[1:]
 
 
 
@@ -75,8 +91,19 @@ class Analysis:
 
         The dx should be in synv with `BasinInit.py`
         """
-        dx = 1/2*(self.dxs[l_idx] + self.dys[l_idx])
-        return dx**(-3)
+        if l_idx == 0:
+            if self.works is None:
+                dx = 1/2*(self.dxs[0] + self.dys[0])
+                return dx**(-3)
+            else:
+                return self.works[0]
+        else:
+            if self.works is None:
+                dx = 1/2*(self.dxs[l_idx] + self.dys[l_idx])
+                coarse_dx = 1/2*(self.dxs[l_idx-1] + self.dys[l_idx-1])
+                return dx**(-3) + coarse_dx**(-3)
+            else:
+                return self.diff_works[l_idx-1]
 
 
     def optimal_Ne(self, tau):
@@ -116,7 +143,5 @@ class Analysis:
         work(0 and + ensemble members) + work(- ensemble members)
         """
         assert len(Nes) == len(self.dxs), "Wrong number of levels"
-        return np.sum([self._level_work(l_idx) for l_idx in range(len(self.dxs))] * np.array(Nes)) \
-                + np.sum([self._level_work(l_idx) for l_idx in range(len(self.dxs[:-1]))] * np.array(Nes[1:]))
+        return np.sum([self._level_work(l_idx) for l_idx in range(len(self.dxs))] * np.array(Nes))
 
-    
