@@ -178,13 +178,13 @@ Nes = [5, 10, 15, 20, 25]
 
 log.write("Nes: " + ", ".join([str(Ne) for Ne in Nes]) + "\n")
 
-err_abs = np.zeros(len(Nes))
-err_rel = np.zeros(len(Nes))
+err_abs = np.zeros((len(Nes),3))
+err_rel = np.zeros((len(Nes),3))
 
 for n, Ne in enumerate(Nes):
     N_test = 5
-    err_abs_n = 0
-    err_rel_n = 0
+    err_abs_n = np.zeros(3)
+    err_rel_n = np.zeros(3)
     for i in range(N_test):
         covXY, coarse_covXY = covsXY(Ne, Yvar, Yloc)
         diff_covXY = covXY - coarse_covXY
@@ -196,5 +196,5 @@ for n, Ne in enumerate(Nes):
     err_rel[n] = err_rel_n
 
 # %%
-np.save(output_path+"/err_abs.npy")
-np.save(output_path+"/err_rel.npy")
+np.save(output_path+"/err_abs.npy", err_abs)
+np.save(output_path+"/err_rel.npy", err_rel)
