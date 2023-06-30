@@ -196,5 +196,9 @@ for n, Ne in enumerate(Nes):
     err_rel[n] = err_rel_n
 
 # %%
-np.save(output_path+"/err_abs.npy", err_abs)
-np.save(output_path+"/err_rel.npy", err_rel)
+for n in range(len(Nes)):
+    log.write("err_abs (" + str(Nes[n]) + ") " + "{:.4f}, ".join([str(err) for err in err_abs[n]]) + "\n")
+log.write("\n")
+
+for n in range(len(Nes)):
+    log.write("err_rel (" + str(Nes[n]) + ") " + "{:.4f}, ".join([str(err) for err in err_rel[n]]) + "\n")
