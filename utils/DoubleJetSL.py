@@ -1,6 +1,7 @@
-from utils.BasinInit import *
+import numpy as np
 
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
+from gpuocean.utils import Common
 
 from scipy.spatial.distance import cdist
 
