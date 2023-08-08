@@ -46,9 +46,8 @@ from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
-from utils.BasinInit import *
 from utils.DoubleJetPlot import *
-from utils.BasinSL import *
+from utils.DoubleJetSL import *
 # %%
 gpu_ctx = Common.CUDAContext()
 gpu_stream = cuda.Stream()
@@ -61,7 +60,7 @@ gpu_stream = cuda.Stream()
 L = 9
 
 # %% 
-from utils.DoubleJetParameters import *
+from utils.DoubleJetParametersReplication import *
 
 # %%
 from gpuocean.utils import DoubleJetCase
