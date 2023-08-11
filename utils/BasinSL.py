@@ -2,6 +2,8 @@ from utils.BasinInit import *
 
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
+import gc
+
 #####################################
 # TODO: Implement in framework of `ÒceanModelEnsemble`!
 #
@@ -210,3 +212,13 @@ def SLrank(SL_ensemble, truth, obs_locations, R=None):
         SL_Fys.append( 1/len(SL_ensemble) * np.sum(state_values < true_values[:,np.newaxis], axis=1) )
 
     return SL_Fys
+
+
+def SLcleanup(SL_ensemble):
+    """ 
+    Deleting a single-level ensemble
+    i.e. releasing the GPU data
+    """
+    for e in range(len(SL_ensemble)):
+        SL_ensemble[e].cleanUp(do_gc=False)
+    gc.collect()
