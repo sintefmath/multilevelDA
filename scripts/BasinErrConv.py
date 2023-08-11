@@ -167,6 +167,9 @@ log.write("Metric: RMSE\n")
 ###########################################
 # tau-LOOP
 
+rmse_SL = np.zeros((len(taus),3))
+rmse_ML = np.zeros((len(taus),3))
+
 for tau_idx in range(len(taus)): 
     print("-----------------------------")
     print("tau = ", taus[tau_idx])
@@ -202,7 +205,20 @@ for tau_idx in range(len(taus)):
 
         # end: n-loop 
 
+    if os.path.isdir("tmpSL"):
+        for f in os.listdir("tmpSL"):
+            err_eta, err_hu, err_hv = np.load(os.path.join("tmpSL", f))
+            rmse_SL[tau_idx] = [np.sqrt(np.sum(err**2)) for err in [err_eta, err_hu, err_hv]]
+
+    if os.path.isdir("tmpML"):
+        for f in os.listdir("tmpML"):
+            err_eta, err_hu, err_hv = np.load(os.path.join("tmpML", f))
+            rmse_ML[tau_idx] = [np.sqrt(np.sum(err**2)) for err in [err_eta, err_hu, err_hv]]
+
     # end: tau-loop
 
 if os.path.isdir("tmpTruth"):
     os.rmdir("tmpTruth")
+
+np.savetxt(output_path+"/rmseSL", rmse_SL)
+np.savetxt(output_path+"/rmseML", rmse_ML)
