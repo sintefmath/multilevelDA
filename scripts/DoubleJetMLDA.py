@@ -232,10 +232,10 @@ while MLOceanEnsemble.t < T_spinup + T_da:
                                 min_localisation_level=min_location_level,
                                 precomp_GC=precomp_GC[h])
 
-    if (MLOceanEnsemble.t % (6*3600) == 0):
-        makePlots(MLOceanEnsemble)
-        if truth_path == "NEW":
-            makeTruePlots(truth)
+    # if (MLOceanEnsemble.t % (6*3600) == 0):
+    makePlots(MLOceanEnsemble)
+    if truth_path == "NEW":
+        makeTruePlots(truth)
 
 sys.exit(0)
 # %%
