@@ -3,7 +3,8 @@ from utils.BasinInit import *
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 def initMLensemble(ML_Nes, args_list, make_data_args, sample_args, 
-                   init_model_error_basis_args=None, sim_model_error_basis_args=None, sim_model_error_time_step=None):
+                   init_model_error_basis_args=None, sim_model_error_basis_args=None, sim_model_error_time_step=None,
+                   print_status=False):
     """
     Utility function for the generation of multi-level ensembles of specific kind
 
@@ -45,7 +46,7 @@ def initMLensemble(ML_Nes, args_list, make_data_args, sample_args,
     # 0-level
     lvl_ensemble = []
     for i in range(ML_Nes[0]):
-        if i % 100 == 0: print(i)
+        if print_status and i % 100 == 0: print(i) 
         sim = make_sim(args_list[0], sample_args, init_fields=data_args_list[0])
         if init_model_error_basis_args is not None:
             init_mekls[0].perturbSim(sim)
@@ -59,7 +60,7 @@ def initMLensemble(ML_Nes, args_list, make_data_args, sample_args,
 
     # diff-levels
     for l_idx in range(1,len(ML_Nes)):
-        print(l_idx)
+        if print_status: print(l_idx)
         lvl_ensemble0 = []
         lvl_ensemble1 = []
         
