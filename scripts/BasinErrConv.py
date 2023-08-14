@@ -170,6 +170,10 @@ log.write("Metric: RMSE\n")
 rmse_SL = np.zeros((len(taus),3))
 rmse_ML = np.zeros((len(taus),3))
 
+center_N = int(args_list[-1]["nx"]/4)
+center_x = int(args_list[-1]["nx"]/2)
+center_y = int(args_list[-1]["ny"]/2)
+
 for tau_idx in range(len(taus)): 
     print("-----------------------------")
     print("tau = ", taus[tau_idx])
@@ -191,11 +195,25 @@ for tau_idx in range(len(taus)):
         print("SL", Nes[tau_idx][1])
         os.system("python BasinErrConvSingle.py -m SL -Ne "+str(Nes[tau_idx][1]))
 
+        if os.path.isdir("tmpSL"):
+            assert len(os.listdir("tmpSL")) == 1, "Please remove old files"
+            f = os.listdir("tmpSL")[0]
+            err_eta, err_hu, err_hv = np.load(os.path.join("tmpSL", f))
+            rmse_SL[tau_idx] = 1/N_exp * np.array([np.sqrt(np.sum(err[center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N]**2)) for err in [err_eta, err_hu, err_hv]])
+            os.remove(os.path.join("tmpSL", f))
+
 
         ########################################
         # NEW ML Ensemble
         print("ML", Nes[tau_idx][0])
         os.system("python BasinErrConvSingle.py -m ML -Ne "+" ".join(str(Ne) for Ne in Nes[tau_idx][0]))
+
+        if os.path.isdir("tmpML"):
+            assert len(os.listdir("tmpML")) == 1, "Please remove old files"
+            f = os.listdir("tmpML")[0]
+            err_eta, err_hu, err_hv = np.load(os.path.join("tmpML", f))
+            rmse_ML[tau_idx] = 1/N_exp * np.array([np.sqrt(np.sum(err[center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N]**2)) for err in [err_eta, err_hu, err_hv]])
+            os.remove(os.path.join("tmpML", f))
 
 
         # Cleaning Up 
@@ -205,20 +223,17 @@ for tau_idx in range(len(taus)):
 
         # end: n-loop 
 
-    if os.path.isdir("tmpSL"):
-        for f in os.listdir("tmpSL"):
-            err_eta, err_hu, err_hv = np.load(os.path.join("tmpSL", f))
-            rmse_SL[tau_idx] = [np.sqrt(np.sum(err**2)) for err in [err_eta, err_hu, err_hv]]
-
-    if os.path.isdir("tmpML"):
-        for f in os.listdir("tmpML"):
-            err_eta, err_hu, err_hv = np.load(os.path.join("tmpML", f))
-            rmse_ML[tau_idx] = [np.sqrt(np.sum(err**2)) for err in [err_eta, err_hu, err_hv]]
-
     # end: tau-loop
 
 if os.path.isdir("tmpTruth"):
     os.rmdir("tmpTruth")
 
-np.savetxt(output_path+"/rmseSL", rmse_SL)
-np.savetxt(output_path+"/rmseML", rmse_ML)
+
+np.savetxt(output_path+"/rmseSL.txt", rmse_SL)
+np.savetxt(output_path+"/rmseML.txt", rmse_ML)
+
+if os.path.isdir("tmpSL"):
+    os.rmdir("tmpSL")
+
+if os.path.isdir("tmpML"):
+    os.rmdir("tmpML")
