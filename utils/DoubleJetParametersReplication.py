@@ -34,7 +34,7 @@ ys = np.linspace(0, ydim, 5, endpoint=False)
 
 [obs_xs, obs_ys] = np.array(np.meshgrid(xs, ys)).T.reshape(-1, 2).T
 
-R = [0.05, 5.0, 5.0]
+R = [0.5, 10.0, 10.0]
 
 # Parameters for assimilation
 obs_var = slice(1,3)
