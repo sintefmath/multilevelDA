@@ -142,3 +142,5 @@ dmypy.json
 **/backups/
 *.npy
 scripts/Output*
+scripts/oldOutput*
+script_copy.py
