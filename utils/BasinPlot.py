@@ -19,9 +19,27 @@ def imshow3(etahuhv, negative_vlim=True,  eta_vlim=3, huv_vlim=100, cmap="coolwa
 
     return fig, axs
 
+def imshow2(uv, negative_vlim=True, uv_vlim=1, cmap="coolwarm", title=None, **kwargs):
+    fig, axs = plt.subplots(1,2, figsize=(10,10))
+    fig.suptitle(title)
+
+    im = axs[0].imshow(uv[0], vmin=-negative_vlim*uv_vlim, vmax=uv_vlim, cmap=cmap, origin="lower", **kwargs)
+    plt.colorbar(im, ax=axs[0], shrink=0.5)
+    axs[0].set_title("$u$", fontsize=15)
+
+    im = axs[1].imshow(uv[1], vmin=-negative_vlim*uv_vlim, vmax=uv_vlim, cmap=cmap, origin="lower", **kwargs)
+    plt.colorbar(im, ax=axs[1], shrink=0.5)
+    axs[1].set_title("$v$", fontsize=15)
+
+    return fig, axs
+
+
 
 def imshow3var(est_var, eta_vlim=0.025, huv_vlim=100, title=None):
     return imshow3(est_var, negative_vlim=False, eta_vlim=eta_vlim, huv_vlim=huv_vlim, cmap="Reds", title=None)
+
+def imshow2var(est_var, uv_vlim=0.5, title=None):
+    return imshow2(est_var, negative_vlim=False, uv_vlim=uv_vlim, cmap="Reds", title=None)
 
 
 def imshowSim(sim, **kwargs):
