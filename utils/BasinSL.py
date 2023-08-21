@@ -167,14 +167,14 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     X0mean = np.average(X0, axis=-1)
 
     Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] + SL_perts.T
-    Y0mean = np.average(Y0, axis=-1)
+    Y0mean = np.average(Y0, axis=-1)[:,np.newaxis]
 
     SL_XY = (relax_factor*np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
-             *1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean[:,np.newaxis]).T)
+             *1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean).T)
              ).reshape(X0mean.shape + (obs_varN,))
 
-    SL_HXY = SL_XY[obs_var,obs_idxs[0],obs_idxs[1],:]
-    SL_YY  = SL_HXY + np.diag(R[obs_var])
+
+    SL_YY = 1/SL_Ne * (Y0 - Y0mean) @ (Y0 - Y0mean).T 
 
     SL_K = SL_XY @ np.linalg.inv(SL_YY)
 
