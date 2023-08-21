@@ -66,6 +66,11 @@ gpu_stream = cuda.Stream()
 
 # %%
 ls = [6, 7, 8, 9, 10]
+# The last level is only used for the reference solution
+
+num_levels = 3
+
+start_l_idx = len(ls)-1-num_levels
 
 # %%
 args_list = []
@@ -88,8 +93,8 @@ for l in ls:
 # %%
 source_path = "/home/florianb/havvarsel/multilevelDA/scripts/VarianceLevelsDA/Basin/2023-06-28T11_25_15sharedOmegaLocalised"
 
-center_vars = np.load(source_path+"/center_vars_21600_L2norm.npy")[:-1]
-center_diff_vars = np.load(source_path+"/center_diff_vars_21600_L2norm.npy")[:-1]
+center_vars = np.load(source_path+"/center_vars_21600_L2norm.npy")[start_l_idx:-1]
+center_diff_vars = np.load(source_path+"/center_diff_vars_21600_L2norm.npy")[start_l_idx:-1]
 
 # %%
 work_path = "/home/florianb/havvarsel/multilevelDA/scripts/PracticalCost/Basin/2023-06-29T14_54_02"
@@ -100,17 +105,16 @@ def raw2costsEnsemble(filename):
     return np.mean(np.sort(rawCosts), axis=1)
 
 # %%
-costsPure = raw2costsEnsemble(work_path+"/costsPureEnsemble.npy")[:-1]
-costsPartnered = raw2costsEnsemble(work_path+"/costsPartneredEnsemble.npy")[:-1]
+costsPure = raw2costsEnsemble(work_path+"/costsPureEnsemble.npy")[start_l_idx:-1]
+costsPartnered = raw2costsEnsemble(work_path+"/costsPartneredEnsemble.npy")[start_l_idx:-1]
 
 # %%
-analysis = Analysis(args_list[:-1], center_vars, center_diff_vars, costsPure, costsPartnered)
+analysis = Analysis(args_list[start_l_idx:-1], center_vars, center_diff_vars, costsPure, costsPartnered)
 
 # %%
 taus = [1.25e-1, 1e-1, 7.5e-2, 5.0e-2, 3.5e-2, 2.5e-2]
 
 Nes = []
-
 for tau in taus:
     ML_Nes = analysis.optimal_Ne(tau=tau)
     SL_Ne = np.ceil(analysis.work(ML_Nes)/costsPure[-1]).astype(int)
@@ -122,11 +126,12 @@ for tau in taus:
 from utils.BasinParameters import * 
 
 # Book keeping
-log.write("levels = " + ", ".join([str(l) for l in ls])+"\n\n")
+log.write("levels = " + ", ".join([str(l) for l in ls[start_l_idx:-1]])+"\n\n")
 
 log.write("ML_Nes = " + ", ".join([str(Ne[0]) for Ne in Nes])+"\n")
 log.write("ML_Nes = " + ", ".join([str(Ne[1]) for Ne in Nes])+"\n\n")
 
+log.write("Reference level (one step finer than finest ensemnble level)\n")
 log.write("nx = " + str(args_list[-1]["nx"]) + ", ny = " + str(args_list[-1]["ny"])+"\n")
 log.write("dx = " + str(args_list[-1]["dx"]) + ", dy = " + str(args_list[-1]["dy"])+"\n")
 log.write("T (DA) = " + str(T_da) +"\n")
@@ -155,21 +160,27 @@ log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
 log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
 
 log.write("Statistics\n")
-N_exp = 100
+N_exp = 10
 log.write("N_exp = " + str(N_exp) + "\n")
 log.write("Metric: Variance in the Kalman Gain estimator\n")
+log.write("Metric: L2-errror in Kalman Gain estimator\n")
 
+# %% 
+MLonly = False
 
 # %%
 from utils import VarianceStatistics as VS
 
-var_SL = len(taus)*[VS.WelfordsVariance3((args_list[-2]["ny"], args_list[-2]["nx"]))]
-var_ML = len(taus)*[VS.WelfordsVariance3((args_list[-2]["ny"], args_list[-2]["nx"]))]
+if not MLonly:
+    var_SL = len(taus)*[VS.WelfordsVariance3((args_list[-1]["ny"], args_list[-1]["nx"]))]
+var_ML = len(taus)*[VS.WelfordsVariance3((args_list[-1]["ny"], args_list[-1]["nx"]))]
 
-varNorm_SL = np.zeros((len(taus),3))
+if not MLonly:
+    varNorm_SL = np.zeros((len(taus),3))
 varNorm_ML = np.zeros((len(taus),3))
 
-err_SL = np.zeros((len(taus),3))
+if not MLonly:
+    err_SL = np.zeros((len(taus),3))
 err_ML = np.zeros((len(taus),3))
 
 # %% 
@@ -181,6 +192,7 @@ if os.path.isdir("tmpTruth"):
         
 os.system("python BasinKGainConvSingle.py -m T")
 
+
 ########################################
 # NEW reference
 print("Reference")
@@ -189,12 +201,13 @@ os.system("python BasinKGainConvSingle.py -m R")
 if os.path.isdir("tmpRefGain"):
     assert len(os.listdir("tmpRefGain")) == 1, "Please remove old files"
     f = os.listdir("tmpRefGain")[0]
-    refK_eta, refK_hu, refK_hv = block_reduce(np.load(os.path.join("tmpRefGain", f))[:,:,:,0], block_size=(1,2,2), func=np.mean)
+    refK_eta, refK_hu, refK_hv = np.load(os.path.join("tmpRefGain", f))[:,:,:,0] #block_reduce(np.load(os.path.join("tmpRefGain", f))[:,:,:,0], block_size=(1,2,2), func=np.mean)
 
     os.makedirs(output_path+"/GainFigs", exist_ok=True)
     fig, axs = imshow3([refK_eta, refK_hu, refK_hv], eta_vlim=1e-2,huv_vlim=1)
     fig.savefig(output_path+"/GainFigs/Ref")
     plt.close("all")
+
 
 # %%
 ###########################################
@@ -207,24 +220,25 @@ for tau_idx in range(len(taus)):
     # N-LOOP 
     for n in range(N_exp):
 
-        # NEW SL Ensemble
-        print("SL", Nes[tau_idx][1])
-        os.system("python BasinKGainConvSingle.py -m SL -Ne "+str(Nes[tau_idx][1]))
+        if not MLonly:
+            # NEW SL Ensemble
+            print("SL", Nes[tau_idx][1])
+            os.system("python BasinKGainConvSingle.py -m SL -Ne "+str(Nes[tau_idx][1]))
 
-        if os.path.isdir("tmpSLGain"):
-            assert len(os.listdir("tmpSLGain")) == 1, "Please remove old files"
-            f = os.listdir("tmpSLGain")[0]
-            K_eta, K_hu, K_hv = np.load(os.path.join("tmpSLGain", f))[:,:,:,0]
-            var_SL[tau_idx].update(K_eta, K_hu, K_hv)
+            if os.path.isdir("tmpSLGain"):
+                assert len(os.listdir("tmpSLGain")) == 1, "Please remove old files"
+                f = os.listdir("tmpSLGain")[0]
+                K_eta, K_hu, K_hv = np.load(os.path.join("tmpSLGain", f))[:,:,:,0].repeat(2,1).repeat(2,2)
+                var_SL[tau_idx].update(K_eta, K_hu, K_hv)
 
-            fig, axs = imshow3([K_eta,K_hu,K_hv], eta_vlim=1e-2,huv_vlim=1)
-            fig.savefig(output_path+"/GainFigs/SL"+str(tau_idx)+"_"+str(n))
-            plt.close("all")
+                fig, axs = imshow3([K_eta,K_hu,K_hv], eta_vlim=1e-2,huv_vlim=1)
+                fig.savefig(output_path+"/GainFigs/SL"+str(tau_idx)+"_"+str(n))
+                plt.close("all")
 
-            err_SL[tau_idx] += 1/N_exp * np.array([np.linalg.norm(err_field) for err_field in [refK_eta-K_eta, refK_hu-K_hu, refK_hv-K_hv] ])
+                err_SL[tau_idx] += 1/N_exp * np.array([np.linalg.norm(err_field) for err_field in [refK_eta-K_eta, refK_hu-K_hu, refK_hv-K_hv] ])
 
-            os.remove(os.path.join("tmpSLGain", f))
-        #TODO: Calculate variance in the error?!
+                os.remove(os.path.join("tmpSLGain", f))
+            #TODO: Calculate variance in the error?!
 
 
 
@@ -235,7 +249,7 @@ for tau_idx in range(len(taus)):
         if os.path.isdir("tmpMLGain"):
             assert len(os.listdir("tmpMLGain")) == 1, "Please remove old files"
             f = os.listdir("tmpMLGain")[0]
-            K_eta, K_hu, K_hv = np.load(os.path.join("tmpMLGain", f))[:,:,:,0]
+            K_eta, K_hu, K_hv = np.load(os.path.join("tmpMLGain", f))[:,:,:,0].repeat(2,1).repeat(2,2)
             var_ML[tau_idx].update(K_eta, K_hu, K_hv)
 
             fig, axs = imshow3([K_eta,K_hu,K_hv], eta_vlim=1e-2,huv_vlim=1)
@@ -247,14 +261,17 @@ for tau_idx in range(len(taus)):
             os.remove(os.path.join("tmpMLGain", f))
         #TODO: Calculate variance in the error?!
 
+
+
         # end: n-loop 
+    
+    if not MLonly:
+        eta_varSL, hu_varSL, hv_varSL = var_SL[tau_idx].finalize()
+        fig, axs = imshow3var([eta_varSL, hu_varSL, hv_varSL], eta_vlim=1e-5,huv_vlim=1e-1)
+        fig.savefig(output_path+"/GainFigs/SLvar"+str(tau_idx))
+        plt.close("all")
 
-    eta_varSL, hu_varSL, hv_varSL = var_SL[tau_idx].finalize()
-    fig, axs = imshow3var([eta_varSL, hu_varSL, hv_varSL], eta_vlim=1e-5,huv_vlim=1e-1)
-    fig.savefig(output_path+"/GainFigs/SLvar"+str(tau_idx))
-    plt.close("all")
-
-    varNorm_SL[tau_idx] = [np.linalg.norm(var_field) for var_field in [eta_varSL, hu_varSL, hv_varSL] ]
+        varNorm_SL[tau_idx] = [np.linalg.norm(var_field) for var_field in [eta_varSL, hu_varSL, hv_varSL] ]
     
     
     eta_varML, hu_varML, hv_varML = var_ML[tau_idx].finalize()
@@ -263,17 +280,28 @@ for tau_idx in range(len(taus)):
     plt.close("all")
 
     varNorm_ML[tau_idx] = [np.linalg.norm(var_field) for var_field in [eta_varML, hu_varML, hv_varML] ]
-    
+
+
+    # Saving results (backup after every tau)
+    if not MLonly:
+        np.savetxt(output_path+"/var_SL.txt", varNorm_SL)
+    np.savetxt(output_path+"/var_ML.txt", varNorm_ML)
+
+    if not MLonly:
+        np.savetxt(output_path+"/errSLGain.txt", err_SL)
+    np.savetxt(output_path+"/errMLGain.txt", err_ML)
     
 
     # end: tau-loop
 
 # %% 
-# Saving results
-np.savetxt(output_path+"/var_SL.txt", varNorm_SL)
+# Saving results (final)
+if not MLonly:
+    np.savetxt(output_path+"/var_SL.txt", varNorm_SL)
 np.savetxt(output_path+"/var_ML.txt", varNorm_ML)
 
-np.savetxt(output_path+"/errSLGain.txt", err_SL)
+if not MLonly:
+    np.savetxt(output_path+"/errSLGain.txt", err_SL)
 np.savetxt(output_path+"/errMLGain.txt", err_ML)
 
 # %% 

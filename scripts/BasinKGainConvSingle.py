@@ -113,37 +113,40 @@ elif mode == "R":
 
     ############################
     # First Gain
+    if T_da == 0.0:
+        # Observation
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        
+        Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-    # Observation
-    true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
-    
-    Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
-    obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
+        SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
+                relax_factor=relax_factor, localisation_weights=localisation_weights)
 
-    localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
-    SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
-            relax_factor=relax_factor, localisation_weights=localisation_weights)
 
-    # localisation_weights_list = []
-    # for obs_x, obs_y in zip(obs_xs, obs_ys):
-    #     localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
 
-    #####################
+
+    localisation_weights_list = []
+    for obs_x, obs_y in zip(obs_xs, obs_ys):
+        localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
+
+    ####################
     # Data assimilation
 
-    # while SL_ensemble[0].t < T_da:
-    #     # Forward step
-    #     SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
+    while SL_ensemble[0].t < T_da:
+        # Forward step
+        SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
         
-    #     # Observation
-    #     true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        # Observation
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
-    #     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-    #         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-    #         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
+            Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-    #         SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
-    #             relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
+            SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
+                relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
 
     # Saving results
     os.makedirs("tmpRefGain", exist_ok=True)
@@ -169,38 +172,40 @@ elif mode == "SL":
 
     #####################
     # First Gain
+    if T_da == 0.0:
+        # Observation
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        
+        Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-    # Observation
-    true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
-    
-    Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
-    obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
-
-    localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
-    SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
-            relax_factor=relax_factor, localisation_weights=localisation_weights)
+        localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
+        SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
+                relax_factor=relax_factor, localisation_weights=localisation_weights)
 
 
-    # localisation_weights_list = []
-    # for obs_x, obs_y in zip(obs_xs, obs_ys):
-    #     localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
 
-    #####################
+
+    localisation_weights_list = []
+    for obs_x, obs_y in zip(obs_xs, obs_ys):
+        localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
+
+    ####################
     # Data assimilation
 
-    # while SL_ensemble[0].t < T_da:
-    #     # Forward step
-    #     SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
+    while SL_ensemble[0].t < T_da:
+        # Forward step
+        SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
         
-    #     # Observation
-    #     true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        # Observation
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
-    #     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-    #         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-    #         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
+            Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-    #         SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
-    #             relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
+            SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
+                relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
 
     # Saving results
     os.makedirs("tmpSLGain", exist_ok=True)
@@ -216,13 +221,15 @@ elif mode == "SL":
 
 elif mode == "ML":
     
+    start_l_idx = len(args_list[:-1]) - len(Nes)
+
     # Initialisation
     data_args_list = []
-    for l_idx in range(len(args_list[:-1])):
-        data_args_list.append( make_init_steady_state(args_list[l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
-    
+    for l_idx in range(len(args_list[start_l_idx:-1])):
+        data_args_list.append( make_init_steady_state(args_list[start_l_idx+l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
+
     from gpuocean.ensembles import MultiLevelOceanEnsembleCase
-    MLOceanEnsemble = MultiLevelOceanEnsembleCase.MultiLevelOceanEnsemble(Nes, args_list[:-1], data_args_list, sample_args, make_sim,
+    MLOceanEnsemble = MultiLevelOceanEnsembleCase.MultiLevelOceanEnsemble(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
                                 init_model_error_basis_args=init_model_error_basis_args, 
                                 sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_timestep=sim_model_error_timestep)
 
@@ -232,39 +239,40 @@ elif mode == "ML":
 
     #####################
     # First Gain
+    if T_da == 0.0:
+        # Observation
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
-    # Observation
-    true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+        Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_xs[0], obs_ys[0])
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        
+        ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_xs[0], obs_ys[0], R, 
+                                        r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
+                                        min_localisation_level=min_location_level)
 
-    Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_xs[0], obs_ys[0])
-    obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+
+
+    precomp_GC = []
+    for obs_x, obs_y in zip(obs_xs, obs_ys):
+        precomp_GC.append( MLEnKF.GCweights(obs_x, obs_y, r) )
     
-    ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_xs[0], obs_ys[0], R, 
-                                    r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
-                                    min_localisation_level=min_location_level)
+    #####################
+    # Data assimilation
+    while MLOceanEnsemble.t < T_da:
+        # Forward step
+        MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
 
+        # DA step
+        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
-    # precomp_GC = []
-    # for obs_x, obs_y in zip(obs_xs, obs_ys):
-    #     precomp_GC.append( MLEnKF.GCweights(obs_x, obs_y, r) )
-    
-    # #####################
-    # # Data assimilation
-    # while MLOceanEnsemble.t < T_da:
-    #     # Forward step
-    #     MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
-
-    #     # DA step
-    #     true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
-
-    #     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-    #         Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
-    #         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
+            Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
             
-    #         ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_x, obs_y, R, 
-    #                                 r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
-    #                                 min_localisation_level=min_location_level,
-    #                                 precomp_GC=precomp_GC[h])
+            ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_x, obs_y, R, 
+                                    r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
+                                    min_localisation_level=min_location_level,
+                                    precomp_GC=precomp_GC[h])
             
     # Saving results
     os.makedirs("tmpMLGain", exist_ok=True)
