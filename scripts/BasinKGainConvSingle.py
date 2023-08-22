@@ -63,7 +63,7 @@ Nes = pargs.ensembleSize
 
 # %% 
 print("Reducing T_da for debugging purposes!")
-T_da = 0
+T_da = 3600
 
 # %%
 ##############################################

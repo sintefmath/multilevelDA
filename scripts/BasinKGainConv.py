@@ -166,7 +166,7 @@ log.write("Metric: Variance in the Kalman Gain estimator\n")
 log.write("Metric: L2-errror in Kalman Gain estimator\n")
 
 # %% 
-MLonly = False
+MLonly = True
 
 # %%
 from utils import VarianceStatistics as VS
@@ -183,30 +183,35 @@ if not MLonly:
     err_SL = np.zeros((len(taus),3))
 err_ML = np.zeros((len(taus),3))
 
+os.makedirs(output_path+"/GainFigs", exist_ok=True)
+
 # %% 
 ########################################
 # NEW truth
 print("Truth")
 if os.path.isdir("tmpTruth"):
-    assert len(os.listdir("tmpTruth")) == 0, "Please remove old files"
-        
+    for f in os.listdir("tmpTruth"):
+        os.remove(os.path.join("tmpTruth", f))
+
 os.system("python BasinKGainConvSingle.py -m T")
 
 
 ########################################
 # NEW reference
 print("Reference")
-os.system("python BasinKGainConvSingle.py -m R")
 
 if os.path.isdir("tmpRefGain"):
-    assert len(os.listdir("tmpRefGain")) == 1, "Please remove old files"
-    f = os.listdir("tmpRefGain")[0]
-    refK_eta, refK_hu, refK_hv = np.load(os.path.join("tmpRefGain", f))[:,:,:,0] #block_reduce(np.load(os.path.join("tmpRefGain", f))[:,:,:,0], block_size=(1,2,2), func=np.mean)
+    for f in os.listdir("tmpRefGain"):
+        os.remove(os.path.join("tmpRefGain", f))
 
-    os.makedirs(output_path+"/GainFigs", exist_ok=True)
-    fig, axs = imshow3([refK_eta, refK_hu, refK_hv], eta_vlim=1e-2,huv_vlim=1)
-    fig.savefig(output_path+"/GainFigs/Ref")
-    plt.close("all")
+os.system("python BasinKGainConvSingle.py -m R")
+
+f = os.listdir("tmpRefGain")[0]
+refK_eta, refK_hu, refK_hv = np.load(os.path.join("tmpRefGain", f))[:,:,:,0] #block_reduce(np.load(os.path.join("tmpRefGain", f))[:,:,:,0], block_size=(1,2,2), func=np.mean)
+
+fig, axs = imshow3([refK_eta, refK_hu, refK_hv], eta_vlim=1e-2,huv_vlim=1)
+fig.savefig(output_path+"/GainFigs/Ref")
+plt.close("all")
 
 
 # %%
@@ -222,7 +227,7 @@ for tau_idx in range(len(taus)):
 
         if not MLonly:
             # NEW SL Ensemble
-            print("SL", Nes[tau_idx][1])
+            print("SL experiment number ", n)
             os.system("python BasinKGainConvSingle.py -m SL -Ne "+str(Nes[tau_idx][1]))
 
             if os.path.isdir("tmpSLGain"):
@@ -243,7 +248,7 @@ for tau_idx in range(len(taus)):
 
 
         # NEW ML Ensemble
-        print("ML", Nes[tau_idx][0])
+        print("ML experiment number ", n)
         os.system("python BasinKGainConvSingle.py -m ML -Ne "+" ".join(str(Ne) for Ne in Nes[tau_idx][0]))
 
         if os.path.isdir("tmpMLGain"):
