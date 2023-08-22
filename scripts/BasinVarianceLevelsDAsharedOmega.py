@@ -335,7 +335,6 @@ for t_idx, T in enumerate(Ts):
             print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ": ", t_now)
 
         # Update step
-        # if DAstep < numDAsteps ?!?! DEBUG
         if DAstep < numDAsteps-1 and truth.t <= T_da:
             print("DA at " + str(truth.t))
             true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
