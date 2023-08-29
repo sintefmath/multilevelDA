@@ -2,6 +2,8 @@ from utils.BasinInit import *
 
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
+from scipy.spatial.distance import cdist
+
 import gc
 
 #####################################
@@ -86,17 +88,24 @@ def GCweights(SL_ensemble, obs_x, obs_y, r):
     Ys = np.linspace(0.5*SL_ensemble[0].dy, (SL_ensemble[0].ny-0.5) * SL_ensemble[0].dy, SL_ensemble[0].ny)
     X, Y = np.meshgrid(Xs, Ys)
 
-    obs_loc = [obs_x, obs_y]
-    dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
+    xdim = SL_ensemble[0].dx * SL_ensemble[0].nx
+    ydim = SL_ensemble[0].dy * SL_ensemble[0].ny
+
+    def _calculate_distance(coord1, coord2, xdim, ydim):
+                    distx = np.abs(coord1[0] - coord2[0])
+                    disty = np.abs(coord1[1] - coord2[1])
+                    distx = np.minimum(distx, xdim - distx)
+                    disty = np.minimum(disty, ydim - disty)
+                    return np.sqrt(distx**2 + disty**2)
+    
+    grid_coordinates = np.vstack((X.flatten(), Y.flatten())).T
+    dists = cdist(grid_coordinates, np.atleast_2d([obs_x, obs_y]),
+                    lambda u, v: _calculate_distance(u, v, xdim, ydim))
+    dists = dists.reshape(X.shape)
 
     GC = np.zeros_like(dists)
-    for i in range(dists.shape[0]):
-        for j in range(dists.shape[1]):
-            dist = dists[i,j]
-            if dist/r < 1: 
-                GC[i,j] = 1 - 5/3*(dist/r)**2 + 5/8*(dist/r)**3 + 1/2*(dist/r)**4 - 1/4*(dist/r)**5
-            elif dist/r >= 1 and dist/r < 2:
-                GC[i,j] = 4 - 5*(dist/r) + 5/3*(dist/r)**2 + 5/8*(dist/r)**3 -1/2*(dist/r)**4 + 1/12*(dist/r)**5 - 2/(3*(dist/r))
+    GC = np.where(dists/r < 1, 1 - 5/3*(dists/r)**2 + 5/8*(dists/r)**3 + 1/2*(dists/r)**4 - 1/4*(dists/r)**5, GC)
+    GC = np.where(np.logical_and((dists/r >= 1), (dists/r < 2)), 4 - 5*(dists/r) + 5/3*(dists/r)**2 + 5/8*(dists/r)**3 -1/2*(dists/r)**4 + 1/12*(dists/r)**5 - 2/np.maximum(1e-6,(3*(dists/r))), GC)
 
     return GC
 
@@ -154,31 +163,33 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     if localisation_weights is None:
         localisation_weights = np.ones((SL_ensemble[0].ny, SL_ensemble[0].nx))
     
-    ## Perturbations
-    if perts is not None:
-        SL_perts = perts
-    else:
-        SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
-
+    ################################
     ## Analysis
     obs_idxs = [Hy, Hx]
 
     X0 = SL_state
     X0mean = np.average(X0, axis=-1)
 
-    Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] + SL_perts.T
+    Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] 
     Y0mean = np.average(Y0, axis=-1)[:,np.newaxis]
 
     SL_XY = (relax_factor*np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
-             *1/SL_Ne*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean).T)
+             *1/(SL_Ne-1)*((X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) @ (Y0 - Y0mean).T)
              ).reshape(X0mean.shape + (obs_varN,))
 
+    SL_YY = 1/(SL_Ne-1) * (Y0 - Y0mean) @ (Y0 - Y0mean).T 
 
-    SL_YY = 1/SL_Ne * (Y0 - Y0mean) @ (Y0 - Y0mean).T 
+    SL_K = SL_XY @ np.linalg.inv(SL_YY + np.diag(R[obs_var]))
 
-    SL_K = SL_XY @ np.linalg.inv(SL_YY)
-
+    ##############################
     ## Update
+
+    # Perturbations
+    if perts is not None:
+        SL_perts = perts
+    else:
+        SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
+
     SL_state = SL_state + (SL_K @ (obs[obs_var,np.newaxis] - SL_state[obs_var,obs_idxs[0],obs_idxs[1]] - SL_perts.T))
 
     SLupload(SL_ensemble, SL_state)
