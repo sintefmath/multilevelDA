@@ -106,7 +106,7 @@ pargs = parser.parse_args()
 Ne = pargs.Ne
 
 # %%
-localisation = False#True
+localisation = False
 
 # %% 
 def g_functional(SL_ensemble):
@@ -221,14 +221,11 @@ log.close()
 
 
 # %% 
-varsNs = np.zeros((3))
-varsTs = [copy.deepcopy(varsNs) for T in Ts]
-lvlvarsTs = [copy.deepcopy(varsTs) for l in ls]
+lvlvarsTs = np.zeros((len(Ts), len(ls), 3))
+difflvlvarsTs = np.zeros((len(Ts), len(ls)-1, 3))
 
-difflvlvarsTs = copy.deepcopy(lvlvarsTs[:-1])
-
-center_lvlvarsTs = copy.deepcopy(lvlvarsTs)
-center_difflvlvarsTs = copy.deepcopy(lvlvarsTs[:-1])
+center_lvlvarsTs = np.zeros((len(Ts), len(ls), 3))
+center_difflvlvarsTs = np.zeros((len(Ts), len(ls)-1, 3))
 
 
 # %% 
@@ -278,6 +275,10 @@ SL_ensembles.append([])
 for l_idx in range(1,len(ls)):
     SL_ensembles.append([])
 
+coarse_SL_ensembles = []
+coarse_SL_ensembles.append([])
+for l_idx in range(1,len(ls)):
+    coarse_SL_ensembles.append([])
 
 for e in range(Ne):
     sim = CDKLM16.CDKLM16(**sim_args_list[0]) 
@@ -289,6 +290,13 @@ for e in range(Ne):
         init_mekls[l_idx].perturbSimSimilarAs(sim, modelError=init_mekls[0])
         SL_ensembles[l_idx].append( sim )
 
+    coarse_SL_ensembles[0].append( None )
+    for l_idx in range(1, len(ls)):    
+        coarse_sim = CDKLM16.CDKLM16(**sim_args_list[l_idx-1]) 
+        init_mekls[l_idx-1].perturbSimSimilarAs(coarse_sim, modelError=init_mekls[0])
+        coarse_SL_ensembles[l_idx].append( coarse_sim )
+
+# %%
 for l_idx in range(len(ls)):
         np.save(output_path+"/SLensemble_"+str(l_idx)+"_init.npy", SLdownload(SL_ensembles[l_idx]))
 
@@ -300,6 +308,7 @@ if localisation:
         localisation_weights_list[h] = GCweights(SL_ensembles[-1], obs_x, obs_y, r) 
 
 
+# %%
 # loop over time
 t_now = 0.0
 for t_idx, T in enumerate(Ts):
@@ -319,6 +328,9 @@ for t_idx, T in enumerate(Ts):
                     SL_ensembles[l_idx][e].step(sim_model_error_timestep, apply_stochastic_term=False)
                     sim_mekls[l_idx].perturbSimSimilarAs(SL_ensembles[l_idx][e], modelError=sim_mekls[0])
 
+                    coarse_SL_ensembles[l_idx][e].step(sim_model_error_timestep, apply_stochastic_term=False)
+                    sim_mekls[l_idx-1].perturbSimSimilarAs(coarse_SL_ensembles[l_idx][e], modelError=sim_mekls[0])
+
             t_now = t_now + sim_model_error_timestep
             print(datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ": ", t_now)
 
@@ -329,33 +341,38 @@ for t_idx, T in enumerate(Ts):
             for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                 Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
                 obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+    
+                for l_idx in range(len(ls)):
+                    if localisation:
+                        localisation_weights = block_reduce(localisation_weights_list[h], block_size=(2**(len(ls)-l_idx-1),2**(len(ls)-l_idx-1)), func=np.mean)
+                    else:
+                        localisation_weights = None
 
-                SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
-                        relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
-                        return_perts=True)
+                    SL_K, SL_perts = SLEnKF(SL_ensembles[l_idx], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
+                                            relax_factor=relax_factor, 
+                                            localisation_weights=localisation_weights,
+                                            return_perts=True)
+                    
+                    if l_idx > 0:
+                        coarselvlHx, coarselvlHy = SLobsCoord2obsIdx(coarse_SL_ensembles[l_idx], obs_x, obs_y)
+                        coarse_SL_K = block_reduce(SL_K, block_size=(1,2,2,1), func=np.mean)
 
-                for l_idx in range(len(ls)-1):
-                    # Update l ensemble
-                    lvlHx, lvlHy = SLobsCoord2obsIdx(SL_ensembles[l_idx], obs_x, obs_y)
-                    coarse_SL_K = block_reduce(SL_K, block_size=(1,2**(len(ls)-1-l_idx),2**(len(ls)-1-l_idx),1), func=np.mean)
-
-                    coarse_SL_state = SLdownload(SL_ensembles[l_idx])
-                    coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,lvlHy,lvlHx] - SL_perts.T))
-                    SLupload(SL_ensembles[l_idx], coarse_SL_state)
-
+                        coarse_SL_state = SLdownload(coarse_SL_ensembles[l_idx])
+                        coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,coarselvlHy,coarselvlHx] - SL_perts.T))
+                        SLupload(coarse_SL_ensembles[l_idx], coarse_SL_state)
 
     print("Saving estimator variance at t=" + str(truth.t))
     for l_idx in range(len(ls)):
-        lvlvarsTs[l_idx][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), args_list[l_idx])
+        lvlvarsTs[t_idx,l_idx] = norm(np.var(g_functional(SL_ensembles[l_idx]), axis=-1), args_list[l_idx])
 
         center_N = int(args_list[l_idx]["nx"]/4)
         center_x = int(args_list[l_idx]["nx"]/2)
         center_y = int(args_list[l_idx]["ny"]/2)
-        center_lvlvarsTs[l_idx][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+        center_lvlvarsTs[t_idx,l_idx] = norm(np.var(g_functional(SL_ensembles[l_idx])[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
             
         if l_idx > 0:
-            difflvlvarsTs[l_idx-1][t_idx] = norm(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2), axis=-1), args_list[l_idx])
-            center_difflvlvarsTs[l_idx-1][t_idx] = norm(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(SL_ensembles[l_idx-1]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
+            difflvlvarsTs[t_idx,l_idx-1] = norm(np.var(g_functional(SL_ensembles[l_idx]) - g_functional(coarse_SL_ensembles[l_idx]).repeat(2,1).repeat(2,2), axis=-1), args_list[l_idx])
+            center_difflvlvarsTs[t_idx,l_idx-1] = norm(np.var((g_functional(SL_ensembles[l_idx]) - g_functional(coarse_SL_ensembles[l_idx]).repeat(2,1).repeat(2,2))[:, center_y-center_N:center_y+center_N, center_x-center_N:center_x+center_N,:], axis=-1), args_list[l_idx])
 
     # Remaining Update step
     if T>0 and truth.t <= T_da:
@@ -364,35 +381,43 @@ for t_idx, T in enumerate(Ts):
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
             Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
             obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+  
+            for l_idx in range(len(ls)):
+                if localisation:
+                    localisation_weights = block_reduce(localisation_weights_list[h], block_size=(2**(len(ls)-l_idx-1),2**(len(ls)-l_idx-1)), func=np.mean)
+                else:
+                    localisation_weights = None
+                    
+                SL_K, SL_perts = SLEnKF(SL_ensembles[l_idx], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
+                                        relax_factor=relax_factor, 
+                                        localisation_weights=localisation_weights,
+                                        return_perts=True)
+                
+                if l_idx > 0:
+                    coarselvlHx, coarselvlHy = SLobsCoord2obsIdx(coarse_SL_ensembles[l_idx], obs_x, obs_y)
+                    coarse_SL_K = block_reduce(SL_K, block_size=(1,2,2,1), func=np.mean)
 
-            SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
-                    relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
-                    return_perts=True)
-
-            for l_idx in range(len(ls)-1):
-                # Update l ensemble
-                lvlHx, lvlHy = SLobsCoord2obsIdx(SL_ensembles[l_idx], obs_x, obs_y)
-                coarse_SL_K = block_reduce(SL_K, block_size=(1,2**(len(ls)-1-l_idx),2**(len(ls)-1-l_idx),1), func=np.mean)
-
-                coarse_SL_state = SLdownload(SL_ensembles[l_idx])
-                coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,lvlHy,lvlHx] - SL_perts.T))
-                SLupload(SL_ensembles[l_idx], coarse_SL_state)
+                    coarse_SL_state = SLdownload(coarse_SL_ensembles[l_idx])
+                    coarse_SL_state = coarse_SL_state + (coarse_SL_K @ (obs[obs_var,np.newaxis] - coarse_SL_state[obs_var,coarselvlHy,coarselvlHx] - SL_perts.T))
+                    SLupload(coarse_SL_ensembles[l_idx], coarse_SL_state)
 
 
     for l_idx in range(len(ls)):
         np.save(output_path+"/SLensemble_"+str(l_idx)+"_"+str(T)+".npy", SLdownload(SL_ensembles[l_idx]))
+        if l_idx > 0:
+            np.save(output_path+"/SLensemble_"+str(l_idx)+"_"+str(T)+"_coarse.npy", SLdownload(coarse_SL_ensembles[l_idx]))
 
 # %% 
 for t_idx, T in enumerate(Ts):
-    varsT = [lvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls))]
+    varsT = [lvlvarsTs[t_idx,l_idx] for l_idx in range(len(ls))]
     np.save(output_path+"/vars_"+str(T), np.array(varsT))
 
-    diff_varsT = [difflvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls)-1)]
+    diff_varsT = [difflvlvarsTs[t_idx,l_idx] for l_idx in range(len(ls)-1)]
     np.save(output_path+"/diff_vars_"+str(T), np.array(diff_varsT))
 
-    center_varsT = [center_lvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls))]
+    center_varsT = [center_lvlvarsTs[t_idx,l_idx] for l_idx in range(len(ls))]
     np.save(output_path+"/center_vars_"+str(T), np.array(center_varsT))
 
-    center_diff_varsT = [center_difflvlvarsTs[l_idx][t_idx] for l_idx in range(len(ls)-1)]
+    center_diff_varsT = [center_difflvlvarsTs[t_idx,l_idx] for l_idx in range(len(ls)-1)]
     np.save(output_path+"/center_diff_vars_"+str(T), np.array(center_diff_varsT))
 
