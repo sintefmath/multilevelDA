@@ -20,11 +20,22 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/Truth/"+timestamp 
+output_path = "DataAssimilation/DoubleJetTruth/"+timestamp 
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
 log.write("Parameters for the experimental set-up\n\n")
+
+gpuocean_path = [p[:-4] for p in sys.path if (p.endswith("gpuocean/src") or p.endswith("gpuocean\\src"))][0]
+import git
+gpuocean_repo = git.Repo(gpuocean_path)
+log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
+
+repo = git.Repo(search_parent_directories=True)
+log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
+
+import shutil
+shutil.copy(__file__, output_path + os.sep + "script_copy.py")
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -35,9 +46,8 @@ from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
-from utils.BasinInit import *
-from utils.BasinPlot import * 
-from utils.BasinSL import *
+from utils.DoubleJetPlot import *
+
 # %%
 gpu_ctx = Common.CUDAContext()
 gpu_stream = cuda.Stream()
@@ -50,30 +60,35 @@ gpu_stream = cuda.Stream()
 L = 9
 
 # %% 
-from utils.BasinParameters import *
+from utils.DoubleJetParametersReplication import *
+
+# %%
+from gpuocean.utils import DoubleJetCase
+
+doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
+doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
+
+# %% 
+args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
+args["gpu_stream"] = gpu_stream
+
+data_args = {"eta" : doubleJetCase_init["eta0"],
+             "hu" : doubleJetCase_init["hu0"],
+             "hv" : doubleJetCase_init["hv0"],
+             "Hi" : doubleJetCase_args["H"]}
+
+sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
 
 # %%
 # Book keeping
 log.write("L = " + str(L) + "\n")
 
-grid_args = initGridSpecs(L)
-log.write("nx = " + str(grid_args["nx"]) + ", ny = " + str(grid_args["ny"])+"\n")
-log.write("dx = " + str(grid_args["dx"]) + ", dy = " + str(grid_args["dy"])+"\n")
+
+log.write("nx = " + str(args["nx"]) + ", ny = " + str(args["ny"])+"\n")
+log.write("dx = " + str(args["dx"]) + ", dy = " + str(args["dy"])+"\n")
+log.write("T (spinup) = " + str(T_spinup) +"\n")
 log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
-
-log.write("Init State\n")
-log.write("Double Bump\n")
-log.write("Bump size [m]: " + str(steady_state_bump_a) +"\n")
-log.write("Bump dist [fractal]: " + str(steady_state_bump_fractal_dist) + "\n\n")
-
-log.write("Init Perturbation\n")
-log.write("KL bases x start: " + str(init_model_error_basis_args["basis_x_start"]) + "\n")
-log.write("KL bases x end: " + str(init_model_error_basis_args["basis_x_end"]) + "\n")
-log.write("KL bases y start: " + str(init_model_error_basis_args["basis_y_start"]) + "\n")
-log.write("KL bases y end: " + str(init_model_error_basis_args["basis_y_end"]) + "\n")
-log.write("KL decay: " + str(init_model_error_basis_args["kl_decay"]) +"\n")
-log.write("KL scaling: " + str(init_model_error_basis_args["kl_scaling"]) + "\n\n")
 
 log.write("Temporal Perturbation\n")
 log.write("Model error timestep: " + str(sim_model_error_timestep) +"\n")
@@ -93,23 +108,8 @@ def write2file(T):
     np.save(output_path+"/truth_"+str(T)+".npy", np.array(true_state))
     
 
-# %%
-args = {
-    "nx": grid_args["nx"],
-    "ny": grid_args["ny"],
-    "dx": grid_args["dx"],
-    "dy": grid_args["dy"],
-    "gpu_ctx": gpu_ctx,
-    "gpu_stream": gpu_stream,
-    "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
-    }
-
-data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
-
 # %% 
 # Truth
-init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
-
 sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
 
 sim_args = {
@@ -130,21 +130,19 @@ sim_args = {
 }
 
 truth = CDKLM16.CDKLM16(**sim_args) 
-init_mekl.perturbSim(truth)
 truth.model_error = sim_mekl
 truth.model_time_step = sim_model_error_timestep
 
-
+# %% 
+# Spin-up
+truth.dataAssimilationStep(T_spinup)
+write2file(int(truth.t))
 
 # %% 
 # DA period
-write2file(int(truth.t))
-
-while truth.t < T_da:
+while truth.t < T_spinup + T_da:
     # Forward step
-    truth.dataAssimilationStep(truth.t+300)
-
-    # DA step
+    truth.dataAssimilationStep(truth.t+da_timestep)
     write2file(int(truth.t))
 
     imshowSim(truth)
@@ -152,6 +150,7 @@ while truth.t < T_da:
     plt.close("all")
 
 
+sys.exit(0)
 # %%
 # Prepare drifters
 from gpuocean.drifters import GPUDrifterCollection
