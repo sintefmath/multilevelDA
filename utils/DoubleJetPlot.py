@@ -27,3 +27,34 @@ def imshow3var(est_var, eta_vlim=0.5, huv_vlim=100, title=None):
 def imshowSim(sim, **kwargs):
     eta, hu, hv = sim.download(interior_domain_only=False)
     return imshow3(np.array([eta, hu, hv]), **kwargs)
+
+
+
+
+def crossSection(etahuv, eta_lim=3.5, huv_lim=900, x_idx=None, **kwargs):
+
+    fig, axs = plt.subplots(1, 3, figsize=(15,3))
+
+    if x_idx is None:
+        x_idx = int(etahuv[0].shape[1]/2)
+    ny = etahuv[0].shape[0]
+
+    axs[0].plot(etahuv[0][:,x_idx])
+    axs[0].set_xlim((0, ny))
+    axs[0].set_ylim((-3.5,3.5))
+
+    axs[1].plot(etahuv[1][:,x_idx])
+    axs[1].set_xlim((0, ny))
+    axs[1].set_ylim((-900,900))
+
+    axs[2].plot(etahuv[2][:,x_idx])
+    axs[2].set_xlim((0, ny))
+    axs[2].set_ylim((-900,900))
+
+    return fig, axs
+
+
+def crossSectionSim(sim, **kwargs):
+    eta, hu, hv = sim.download(interior_domain_only=True)
+    return crossSection(np.array([eta, hu, hv]), **kwargs)
+

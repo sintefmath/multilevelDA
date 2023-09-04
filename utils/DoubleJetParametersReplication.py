@@ -42,6 +42,6 @@ r = 5e4
 relax_factor = 0.25
 min_location_level = 0
 
-da_timestep = 900
+da_timestep = 300
 
 # Drifters
