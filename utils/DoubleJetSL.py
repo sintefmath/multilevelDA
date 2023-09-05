@@ -5,49 +5,32 @@ from gpuocean.utils import Common
 
 from scipy.spatial.distance import cdist
 
+import pycuda.driver as cuda
+
 #####################################
 # TODO: Implement in framework of `ÒceanModelEnsemble`!
 #
 # This script mostly consists of duplicates 
 # But for convenience in the Rossby example all functionalities are collected here
 
-def initSLensemble(Ne, args, data_args, sample_args, 
-                    init_model_error_basis_args=None, 
-                    sim_model_error_basis_args=None, sim_model_error_time_step=60.0):
+def initSLensemble(Ne, doubleJetCase_args, doubleJetCase_init,  
+                    doubleJetCase_meargs=None, sim_model_error_time_step=60.0):
     
-    sim_args = {
-        "gpu_ctx" : args["gpu_ctx"],
-        "nx" : args["nx"],
-        "ny" : args["ny"],
-        "dx" : args["dx"],
-        "dy" : args["dy"],
-        "f"  : sample_args["f"],
-        "g"  : sample_args["g"],
-        "r"  : 0,
-        "dt" : 0,
-        "boundary_conditions": Common.BoundaryConditions(2,2,2,2),
-        "eta0" : data_args["eta"],
-        "hu0"  : data_args["hu"],
-        "hv0"  : data_args["hv"],
-        "H"    : data_args["Hi"],
-    }
+    # Letting simulator set dt
+    doubleJetCase_args["dt"] = 0.0
 
+    # Init a single model error with own stream
+    mekl_stream = cuda.Stream()
+    grid_args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
+    mekl = ModelErrorKL.ModelErrorKL(gpu_stream=mekl_stream, **grid_args, **doubleJetCase_meargs)
 
+    # Generate ensemble
     SL_ensemble = []
-
-    if init_model_error_basis_args is not None:
-        init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
-
-    if sim_model_error_basis_args is not None:
-        sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
-
     for e in range(Ne):
-        sim = CDKLM16.CDKLM16(**sim_args) 
-        if init_model_error_basis_args is not None:
-            init_mekl.perturbSim(sim)
-        if sim_model_error_basis_args is not None:
-            sim.model_error = sim_mekl
-            sim.model_time_step = sim_model_error_time_step
+        sim = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init) 
+        
+        sim.model_error = mekl
+        sim.model_time_step = sim_model_error_time_step
         SL_ensemble.append( sim )
 
     return SL_ensemble
@@ -107,13 +90,8 @@ def GCweights(SL_ensemble, obs_x, obs_y, r):
     # dists = np.sqrt((X - obs_loc[0])**2 + (Y - obs_loc[1])**2)
 
     GC = np.zeros_like(dists)
-    for i in range(dists.shape[0]):
-        for j in range(dists.shape[1]):
-            dist = dists[i,j]
-            if dist/r < 1: 
-                GC[i,j] = 1 - 5/3*(dist/r)**2 + 5/8*(dist/r)**3 + 1/2*(dist/r)**4 - 1/4*(dist/r)**5
-            elif dist/r >= 1 and dist/r < 2:
-                GC[i,j] = 4 - 5*(dist/r) + 5/3*(dist/r)**2 + 5/8*(dist/r)**3 -1/2*(dist/r)**4 + 1/12*(dist/r)**5 - 2/(3*(dist/r))
+    GC = np.where(dists/r < 1, 1 - 5/3*(dists/r)**2 + 5/8*(dists/r)**3 + 1/2*(dists/r)**4 - 1/4*(dists/r)**5, GC)
+    GC = np.where(np.logical_and((dists/r >= 1), (dists/r < 2)), 4 - 5*(dists/r) + 5/3*(dists/r)**2 + 5/8*(dists/r)**3 -1/2*(dists/r)**4 + 1/12*(dists/r)**5 - 2/np.maximum(1e-6,(3*(dists/r))), GC)
 
     return GC
 
@@ -135,7 +113,7 @@ def SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y):
 
 def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var, 
            relax_factor=1.0, localisation_weights=None,
-           return_perts=False, perts=None):
+           return_perts=False, perts=None, dx=None, dy=None):
     """
     SL_ensemble     - list of CDKLM16 instances
     obs             - ndarray of size (3,) with truth observation (eta, hu, hv)
@@ -154,12 +132,30 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     assert not isinstance(obs_y, (np.integer, int)), "This should be physical distance, not index"
 
 
-    # From observation location to observation indices
-    Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-
+    
     ## Prior
-    SL_state = SLdownload(SL_ensemble) 
-    SL_Ne = len(SL_ensemble)
+    if not isinstance(SL_ensemble[0], np.ndarray):
+        SL_state = SLdownload(SL_ensemble) 
+        SL_Ne = len(SL_ensemble)
+
+        # From observation location to observation indices
+        Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+
+    else: 
+        SL_state = SL_ensemble
+        SL_Ne = SL_state.shape[-1]
+
+        assert dx is not None, "dx has to be given, when SL_state is an np.ndarray"
+        assert dy is not None, "dy has to be given, when SL_state is an np.ndarray"
+
+        ny, nx = SL_state.shape[1:3]
+
+        Xs = np.linspace(dx/2, (nx - 1/2) * dx, nx)
+        Ys = np.linspace(dy/2, (ny - 1/2) * dy, ny)
+
+        Hx = ((Xs - obs_x)**2).argmin()
+        Hy = ((Ys - obs_y)**2).argmin()
+
 
     # Variables
     if obs_var.step is None:
@@ -197,12 +193,16 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     ## Update
     SL_state = SL_state + (SL_K @ (obs[obs_var,np.newaxis] - SL_state[obs_var,obs_idxs[0],obs_idxs[1]] - SL_perts.T))
 
-    SLupload(SL_ensemble, SL_state)
+    if not isinstance(SL_ensemble[0], np.ndarray):
+        SLupload(SL_ensemble, SL_state)
 
-    if return_perts:
-        return SL_K, SL_perts
+        if return_perts:
+            return SL_K, SL_perts
+        else:
+            return SL_K
+
     else:
-        return SL_K
+        return SL_state
 
 
 def SLrank(SL_ensemble, truth, obs_locations, R=None):
