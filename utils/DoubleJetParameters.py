@@ -36,7 +36,7 @@ R = [0.05, 5.0, 5.0]
 
 # Parameters for assimilation
 obs_var = slice(1,3)
-r = 5e4
+r = 4e4
 relax_factor = 0.1
 min_location_level = 0
 
