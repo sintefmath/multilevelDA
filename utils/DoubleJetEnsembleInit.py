@@ -2,8 +2,10 @@ from utils.BasinInit import *
 
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
-def initMLensemble(ML_Nes, args_list, make_data_args, sample_args, 
-                   init_model_error_basis_args=None, sim_model_error_basis_args=None, sim_model_error_time_step=None):
+import pycuda.driver as cuda
+
+def initMLensemble(ML_Nes, args_list, init_list, 
+                   sim_model_error_basis_args=None, sim_model_error_time_step=None):
     """
     Utility function for the generation of multi-level ensembles of specific kind
 
@@ -17,26 +19,14 @@ def initMLensemble(ML_Nes, args_list, make_data_args, sample_args,
     """
 
     assert len(ML_Nes) == len(args_list), "Number of levels in args and level sizes do not match"
-
-    data_args_list = []
-    if isinstance(make_data_args, list):
-        assert len(ML_Nes) == len(make_data_args), "Number of levels in data_args and level sizes do not match"
-        data_args_list = make_data_args
-    else: 
-        for l_idx in range(len(ML_Nes)):
-            data_args_list.append( make_data_args(args_list[l_idx]) )
+    assert len(args_list) == len(init_list), "Number of levels in args and level sizes do not match"
 
     # Model errors
-    if init_model_error_basis_args is not None: 
-        init_mekls = []
-        for l_idx in range(len(args_list)): 
-            init_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **init_model_error_basis_args) )
-
-    if sim_model_error_basis_args is not None: 
-        sim_mekls = []
-        for l_idx in range(len(args_list)): 
-            sim_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **sim_model_error_basis_args) )
-
+    mekl_stream = cuda.Stream()
+    mekls = []
+    for l_idx in range(len(args_list)): 
+        grid_args = {key: args_list[l_idx][key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
+        mekls.append( ModelErrorKL.ModelErrorKL(gpu_stream=mekl_stream, **grid_args, **sim_model_error_basis_args) )
 
 
     ## MultiLevel ensemble
@@ -46,12 +36,9 @@ def initMLensemble(ML_Nes, args_list, make_data_args, sample_args,
     lvl_ensemble = []
     for i in range(ML_Nes[0]):
         if i % 100 == 0: print(i)
-        sim = make_sim(args_list[0], sample_args, init_fields=data_args_list[0])
-        if init_model_error_basis_args is not None:
-            init_mekls[0].perturbSim(sim)
-        if sim_model_error_basis_args is not None:
-            # sim.setKLModelError(**sim_model_error_basis_args)
-            sim.model_error = sim_mekls[0]
+        sim = CDKLM16.CDKLM16(**args_list[0], **init_list[0]) 
+
+        sim.model_error = mekls[0]
         sim.model_time_step = sim_model_error_time_step
         lvl_ensemble.append( sim )
 
@@ -64,16 +51,11 @@ def initMLensemble(ML_Nes, args_list, make_data_args, sample_args,
         lvl_ensemble1 = []
         
         for e in range(ML_Nes[l_idx]):
-            sim0 = make_sim(args_list[l_idx], sample_args, init_fields=data_args_list[l_idx])
-            sim1 = make_sim(args_list[l_idx-1], sample_args, init_fields=data_args_list[l_idx-1])
-            
-            if init_model_error_basis_args is not None:
-                init_mekls[l_idx].perturbSim(sim0)
-                init_mekls[l_idx-1].perturbSimSimilarAs(sim1, modelError=init_mekls[l_idx])
+            sim0 = CDKLM16.CDKLM16(**args_list[l_idx], **init_list[l_idx]) 
+            sim1 = CDKLM16.CDKLM16(**args_list[l_idx-1], **init_list[l_idx-1])
 
-            if sim_model_error_basis_args is not None:
-                sim0.model_error = sim_mekls[l_idx]
-                sim1.model_error = sim_mekls[l_idx-1]
+            sim0.model_error = mekls[l_idx]
+            sim1.model_error = mekls[l_idx-1]
 
             sim0.model_time_step = sim_model_error_time_step
             sim1.model_time_step = sim_model_error_time_step
