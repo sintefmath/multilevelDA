@@ -9,6 +9,7 @@
 #Import packages we need
 import numpy as np
 import sys, os
+import copy
 
 #For plotting
 import matplotlib
@@ -66,19 +67,7 @@ from utils.DoubleJetParametersReplication import *
 from gpuocean.utils import DoubleJetCase
 
 doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
-doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
-
-# %% 
-args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
-args["gpu_stream"] = gpu_stream
-
-data_args = {"eta" : doubleJetCase_init["eta0"],
-             "hu" : doubleJetCase_init["hu0"],
-             "hv" : doubleJetCase_init["hv0"],
-             "Hi" : doubleJetCase_args["H"]}
-
-sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
-
+doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %% 
 # Flags for model error
@@ -102,8 +91,8 @@ localisation = True
 log.write("L = " + str(L) + "\n")
 log.write("Ne = " + str(Ne) + "\n\n")
 
-log.write("nx = " + str(args["nx"]) + ", ny = " + str(args["ny"])+"\n")
-log.write("dx = " + str(args["dx"]) + ", dy = " + str(args["dy"])+"\n")
+log.write("nx = " + str(doubleJetCase_args["nx"]) + ", ny = " + str(doubleJetCase_args["ny"])+"\n")
+log.write("dx = " + str(doubleJetCase_args["dx"]) + ", dy = " + str(doubleJetCase_args["dy"])+"\n")
 log.write("T (spinup) = " + str(T_spinup) +"\n")
 log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
@@ -122,8 +111,8 @@ if truth_path != "NEW":
     log.write("from file: " + truth_path + "\n")
 
     truth0 = np.load(truth_path+"/truth_0.npy")
-    assert truth0.shape[1] == args["ny"], "Truth has wrong dimensions"
-    assert truth0.shape[2] == args["nx"], "Truth has wrong dimensions"
+    assert truth0.shape[1] == doubleJetCase_args["ny"], "Truth has wrong dimensions"
+    assert truth0.shape[2] == doubleJetCase_args["nx"], "Truth has wrong dimensions"
 else:
     log.write("saved to file\n")
 
@@ -136,9 +125,7 @@ log.write("DA time steps: " + str(da_timestep) + "\n")
 log.write("relax_factor = " + str(relax_factor) +"\n")
 log.write("obs_var = slice(1,3)\n")
 if localisation:
-    log.write("r = " +str(r) + "\n")
-    log.write("min_location_level = " + str(localisation) +"\n\n")
-
+    log.write("r = " +str(r) + "\n\n")
 
 log.close()
 
@@ -177,9 +164,9 @@ if truth_path=="NEW":
 
 # %%
 # Ensemble
-SL_ensemble = initSLensemble(Ne, args, data_args, sample_args, 
-                             init_model_error_basis_args=None, 
-                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
+from utils.DoubleJetSL import * 
+SL_ensemble = initSLensemble(100, doubleJetCase_args, doubleJetCase_init, sim_model_error_basis_args, 
+                             sim_model_error_time_step=sim_model_error_timestep)
 
 
 # %%
@@ -210,19 +197,22 @@ while SL_ensemble[0].t < T_spinup + T_da:
     else:
         true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
     
+    SL_state = copy.deepcopy(SLdownload(SL_ensemble))
+
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
 
-        SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
-               relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
+        SL_state = SLEnKF(SL_state, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
+               relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
+               dx=SL_ensemble[h].dx, dy=SL_ensemble[h].dy)
+        
+    SLupload(SL_ensemble, SL_state)
     # write2file(int(truth.t), "posterior")
 
     makePlots()
     if truth_path == "NEW":
         makeTruePlots(truth)
-
-sys.exit(0)
 
 # %% 
 # Prepare drifters
@@ -230,9 +220,9 @@ from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.utils import Observation
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
-                'nx': grid_args["nx"], 'ny': grid_args["ny"],
-                'domain_size_x': grid_args["nx"]*grid_args["dx"],
-                'domain_size_y': grid_args["ny"]*grid_args["dy"],
+                'nx': doubleJetCase_args["nx"], 'ny': doubleJetCase_args["ny"],
+                'domain_size_x': doubleJetCase_args["nx"]*doubleJetCase_args["dx"],
+                'domain_size_y': doubleJetCase_args["ny"]*doubleJetCase_args["dy"],
                }
 
 num_drifters = len(init_positions)
@@ -241,7 +231,7 @@ forecasts = []
 for e in range(len(SL_ensemble)):
     forecast = Observation.Observation(**observation_args)
     drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
-                                            boundaryConditions = args["boundary_conditions"],
+                                            boundaryConditions = doubleJetCase_args["boundary_conditions"],
                                             domain_size_x = forecast.domain_size_x,
                                             domain_size_y = forecast.domain_size_y)
     drifters.setDrifterPositions(init_positions)
@@ -249,22 +239,54 @@ for e in range(len(SL_ensemble)):
     forecast.add_observation_from_sim(SL_ensemble[0])
     forecasts.append(forecast)
 
+
+if truth_path == "NEW":
+    true_trajectories = Observation.Observation(**observation_args)
+
+    true_drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
+                                            boundaryConditions = doubleJetCase_args["boundary_conditions"],
+                                            domain_size_x = true_trajectories.domain_size_x,
+                                            domain_size_y = true_trajectories.domain_size_y)
+    
+    true_drifters.setDrifterPositions(init_positions)
+
+    truth.attachDrifters(true_drifters)
+
+    true_trajectories.add_observation_from_sim(truth)
+
 # %%
 # Forecast period
 while SL_ensemble[0].t < T_da + T_forecast:
-    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + 300.0)
+
+    SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
     for e in range(len(SL_ensemble)):
         forecasts[e].add_observation_from_sim(SL_ensemble[e])
+    
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(SL_ensemble[0].t)
+        true_trajectories.add_observation_from_sim(truth)
+
     # write2file(int(SL_ensemble[0].t), "")
     if SL_ensemble[0].t % 3600 < 0.1:
         makePlots(None)
 
+# Saving results
+drifter_folder = os.path.join(output_path, 'sldrifters')
+os.makedirs(drifter_folder)
+for e in range(len(SL_ensemble)):
+    forecasts[e].to_pickle(os.path.join(drifter_folder,"sldrifters_"+str(e).zfill(4)))
+
+
+if truth_path == "NEW":
+    true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters"))
+
+    
 # %%
 for drifter_id in range(len(init_positions)): 
     fig, ax = plt.subplots(1,1, figsize=(10,10))
     domain_extent = [0, SL_ensemble[0].nx*SL_ensemble[0].dx/1000, 0, SL_ensemble[0].ny*SL_ensemble[0].dy/1000]
 
-    ax.imshow(np.zeros((grid_args["ny"], grid_args["nx"])), interpolation="none", origin='lower', 
+    ax.imshow(np.zeros((doubleJetCase_args["ny"], doubleJetCase_args["nx"])), interpolation="none", origin='lower', 
                 cmap=plt.cm.Oranges, extent=domain_extent, zorder=-10)
 
     for forecast in forecasts:

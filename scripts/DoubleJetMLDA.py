@@ -66,24 +66,14 @@ from utils.DoubleJetParametersReplication import *
 from gpuocean.utils import DoubleJetCase
 
 args_list = []
-data_args_list = []
+init_list = []
 
 for l in ls:
     doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**l, nx=2**(l+1))
-    doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
+    doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
-    args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
-    args["gpu_stream"] = gpu_stream
-    args_list.append(args)
-
-    data_args = {"eta" : doubleJetCase_init["eta0"],
-                "hu" : doubleJetCase_init["hu0"],
-                "hv" : doubleJetCase_init["hv0"],
-                "Hi" : doubleJetCase_args["H"]}
-    data_args_list.append(data_args)
-
-sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
-
+    args_list.append(doubleJetCase_args)
+    init_list.append(doubleJetCase_init)
 
 
 # %% 
@@ -184,10 +174,10 @@ if truth_path=="NEW":
 
 # %%
 # Ensemble
-from utils.BasinEnsembleInit import *
-ML_ensemble = initMLensemble(ML_Nes, args_list, data_args_list, sample_args, 
-                             init_model_error_basis_args=None, 
-                             sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
+from utils.DoubleJetEnsembleInit import *
+ML_ensemble = initMLensemble(ML_Nes, args_list, init_list,
+                             sim_model_error_basis_args=sim_model_error_basis_args, 
+                             sim_model_error_time_step=sim_model_error_timestep)
 
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
@@ -223,24 +213,71 @@ while MLOceanEnsemble.t < T_spinup + T_da:
     else:
         true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
+    ML_state = copy.deepcopy(MLOceanEnsemble.download())
+    
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
         
-        ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_x, obs_y, R, 
+        ML_state = MLEnKF.assimilate(ML_state, obs, obs_x, obs_y, R, 
                                 r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
                                 min_localisation_level=min_location_level,
                                 precomp_GC=precomp_GC[h])
+    
+    MLOceanEnsemble.upload(ML_state)
 
     # if (MLOceanEnsemble.t % (6*3600) == 0):
     makePlots(MLOceanEnsemble)
     if truth_path == "NEW":
         makeTruePlots(truth)
 
-sys.exit(0)
 # %%
-# DA period
+# Prepare drifters
+drifter_ensemble_size = 50
+num_drifters = len(init_positions)
+
+MLOceanEnsemble.attachDrifters(drifter_ensemble_size, init_positions)
+
+if truth_path == "NEW":
+    from gpuocean.drifters import GPUDrifterCollection
+    from gpuocean.utils import Observation
+    from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+    observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
+                    'nx': doubleJetCase_args["nx"], 'ny': doubleJetCase_args["ny"],
+                    'domain_size_x': doubleJetCase_args["nx"]*doubleJetCase_args["dx"],
+                    'domain_size_y': doubleJetCase_args["ny"]*doubleJetCase_args["dy"],
+                }
+    true_trajectories = Observation.Observation(**observation_args)
+
+    true_drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
+                                            boundaryConditions = doubleJetCase_args["boundary_conditions"],
+                                            domain_size_x = true_trajectories.domain_size_x,
+                                            domain_size_y = true_trajectories.domain_size_y)
+    
+    true_drifters.setDrifterPositions(init_positions)
+
+    truth.attachDrifters(true_drifters)
+
+    true_trajectories.add_observation_from_sim(truth)
+
+# %%
+# Forecast period
 while MLOceanEnsemble.t < T_spinup + T_da + T_forecast:
-    # Forward step
-    MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + 3600)
-    makePlots(MLOceanEnsemble)
+    
+    MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
+    MLOceanEnsemble.registerDrifterPositions()
+
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(MLOceanEnsemble.t)
+        true_trajectories.add_observation_from_sim(truth)
+
+    if MLOceanEnsemble.t%3600 < 0.1:
+        makePlots(MLOceanEnsemble)
+
+# Save results
+drifter_folder = os.path.join(output_path, 'mldrifters')
+os.makedirs(drifter_folder)
+MLOceanEnsemble.saveDriftTrajectoriesToFile(drifter_folder, "mldrifters")
+
+if truth_path == "NEW":
+    true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters"))
