@@ -1,5 +1,3 @@
-from utils.BasinInit import *
-
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 import pycuda.driver as cuda
