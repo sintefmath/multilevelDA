@@ -20,7 +20,7 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "MC/"+timestamp
+output_path = "MC/SL/"+timestamp
 os.makedirs(output_path, exist_ok=True)
 
 log = open(output_path+"/log.txt", 'w')
@@ -65,7 +65,7 @@ from utils.BasinParameters import *
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Ne', type=int, default=100)
+parser.add_argument('--Ne', type=int, default=50)
 
 pargs = parser.parse_args()
 
@@ -163,16 +163,6 @@ observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
                 'domain_size_y': grid_args["ny"]*grid_args["dy"],
                }
 
-init_positions = np.array([[500*80, 1000*80],  #[[x1, y1],
-                           [550*80, 1000*80],  # [x2, y2],
-                           [450*80, 1000*80],
-                           [500*80, 1050*80],
-                           [550*80, 1050*80],
-                           [450*80, 1050*80],
-                           [500*80, 1100*80],
-                           [550*80, 1100*80],
-                           [450*80, 1100*80]
-                           ]) 
 num_drifters = len(init_positions)
 
 forecasts = []
@@ -198,17 +188,11 @@ while SL_ensemble[0].t < T_da + T_forecast:
         print("Plotting at ", SL_ensemble[0].t)
         makePlots()
 
-# %%
-for drifter_id in range(len(init_positions)): 
-    fig, ax = plt.subplots(1,1, figsize=(10,10))
-    domain_extent = [0, SL_ensemble[0].nx*SL_ensemble[0].dx/1000, 0, SL_ensemble[0].ny*SL_ensemble[0].dy/1000]
 
-    ax.imshow(np.zeros((grid_args["ny"], grid_args["nx"])), interpolation="none", origin='lower', 
-                cmap=plt.cm.Oranges, extent=domain_extent, zorder=-10)
+drifter_folder = os.path.join(output_path, 'sldrifters')
+os.makedirs(drifter_folder)
+for e in range(len(SL_ensemble)):
+    forecasts[e].to_pickle(os.path.join(drifter_folder,"sldrifters_"+str(e).zfill(4)+".pickle"))
 
-    for forecast in forecasts:
-        path = forecast.get_drifter_path(drifter_id, 0,  SL_ensemble[0].t, in_km = True)[0]
-        ax.plot(path[:,0], path[:,1], color="C"+str(drifter_id), ls="-", zorder=-3)
 
-    plt.savefig(output_path+"/drift_"+str(drifter_id)+".pdf", bbox_inches="tight")
 
