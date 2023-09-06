@@ -57,7 +57,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 9
+L = 8
 
 # %% 
 from utils.DoubleJetParametersReplication import *
@@ -65,27 +65,19 @@ from utils.DoubleJetParametersReplication import *
 # %%
 from gpuocean.utils import DoubleJetCase
 
-doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
-doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
-
-# %% 
-args = {key: doubleJetCase_args[key] for key in ('nx', 'ny', 'dx', 'dy', 'gpu_ctx', 'boundary_conditions')}
-args["gpu_stream"] = gpu_stream
-
-data_args = {"eta" : doubleJetCase_init["eta0"],
-             "hu" : doubleJetCase_init["hu0"],
-             "hv" : doubleJetCase_init["hv0"],
-             "Hi" : doubleJetCase_args["H"]}
-
-sample_args = {"f": doubleJetCase_args["f"], "g": doubleJetCase_args["g"]}
+doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, 
+                                            model_error=2, 
+                                            ny=2**L, nx=2**(L+1))
+doubleJetCase_args, doubleJetCase_init, doubleJetCase_meargs = doubleJetCase.getInitConditions()
+doubleJetCase_args["dt"] = 0.0
 
 # %%
 # Book keeping
 log.write("L = " + str(L) + "\n")
 
 
-log.write("nx = " + str(args["nx"]) + ", ny = " + str(args["ny"])+"\n")
-log.write("dx = " + str(args["dx"]) + ", dy = " + str(args["dy"])+"\n")
+log.write("nx = " + str(doubleJetCase_args["nx"]) + ", ny = " + str(doubleJetCase_args["ny"])+"\n")
+log.write("dx = " + str(doubleJetCase_args["dx"]) + ", dy = " + str(doubleJetCase_args["dy"])+"\n")
 log.write("T (spinup) = " + str(T_spinup) +"\n")
 log.write("T (DA) = " + str(T_da) +"\n")
 log.write("T (forecast) = " + str(T_forecast) +"\n\n")
@@ -110,27 +102,8 @@ def write2file(T):
 
 # %% 
 # Truth
-sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
-
-sim_args = {
-    "gpu_ctx" : args["gpu_ctx"],
-    "nx" : args["nx"],
-    "ny" : args["ny"],
-    "dx" : args["dx"],
-    "dy" : args["dy"],
-    "f"  : sample_args["f"],
-    "g"  : sample_args["g"],
-    "r"  : 0,
-    "dt" : 0,
-    "boundary_conditions": Common.BoundaryConditions(2,2,2,2),
-    "eta0" : data_args["eta"],
-    "hu0"  : data_args["hu"],
-    "hv0"  : data_args["hv"],
-    "H"    : data_args["Hi"],
-}
-
-truth = CDKLM16.CDKLM16(**sim_args) 
-truth.model_error = sim_mekl
+truth = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init) 
+truth.setKLModelError(**doubleJetCase_meargs)
 truth.model_time_step = sim_model_error_timestep
 
 # %% 
@@ -150,16 +123,15 @@ while truth.t < T_spinup + T_da:
     plt.close("all")
 
 
-sys.exit(0)
 # %%
 # Prepare drifters
 from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.utils import Observation
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
-                'nx': grid_args["nx"], 'ny': grid_args["ny"],
-                'domain_size_x': grid_args["nx"]*grid_args["dx"],
-                'domain_size_y': grid_args["ny"]*grid_args["dy"],
+                'nx': doubleJetCase_args["nx"], 'ny': doubleJetCase_args["ny"],
+                'domain_size_x': doubleJetCase_args["nx"]*doubleJetCase_args["dx"],
+                'domain_size_y': doubleJetCase_args["ny"]*doubleJetCase_args["dy"],
                }
 
 num_drifters = len(init_positions)
@@ -167,7 +139,7 @@ num_drifters = len(init_positions)
 
 forecast = Observation.Observation(**observation_args)
 drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
-                                        boundaryConditions = args["boundary_conditions"],
+                                        boundaryConditions = doubleJetCase_args["boundary_conditions"],
                                         domain_size_x = forecast.domain_size_x,
                                         domain_size_y = forecast.domain_size_y)
 drifters.setDrifterPositions(init_positions)
