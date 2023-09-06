@@ -9,6 +9,7 @@
 #Import packages we need
 import numpy as np
 import sys, os
+import copy
 
 #For plotting
 import matplotlib
@@ -46,7 +47,6 @@ from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
-from utils.BasinInit import *
 from utils.DoubleJetPlot import *
 # %%
 gpu_ctx = Common.CUDAContext()
@@ -57,7 +57,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %%
-ls = [8, 9]
+ls = [7, 8]
 
 # %% 
 from utils.DoubleJetParametersReplication import * 
@@ -80,7 +80,7 @@ for l in ls:
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="NEW")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-06T10_34_32")
 
 pargs = parser.parse_args()
 
@@ -91,7 +91,7 @@ truth_path = pargs.truth_path
 # ## Ensemble
 
 # %% 
-ML_Nes = [150, 50]
+ML_Nes = [100, 25]
 
 # %%
 # Book keeping
@@ -117,7 +117,7 @@ log.write("Truth\n")
 if truth_path != "NEW":
     log.write("from file: " + truth_path + "\n")
 
-    truth0 = np.load(truth_path+"/truth_0.npy")
+    truth0 = np.load(truth_path+"/truth_"+str(T_spinup)+".npy")
     assert truth0.shape[1] == args_list[-1]["ny"], "Truth has wrong dimensions"
     assert truth0.shape[2] == args_list[-1]["nx"], "Truth has wrong dimensions"
 else:
@@ -192,7 +192,8 @@ for obs_x, obs_y in zip(obs_xs, obs_ys):
     precomp_GC.append( MLEnKF.GCweights(obs_x, obs_y, r) )
 
 # Spin up period
-truth.dataAssimilationStep(T_spinup)
+if truth_path=="NEW":
+    truth.dataAssimilationStep(T_spinup)
 MLOceanEnsemble.stepToObservation(T_spinup)
 
 # %% 
@@ -236,21 +237,21 @@ while MLOceanEnsemble.t < T_spinup + T_da:
 drifter_ensemble_size = 50
 num_drifters = len(init_positions)
 
-MLOceanEnsemble.attachDrifters(drifter_ensemble_size, init_positions)
+MLOceanEnsemble.attachDrifters(drifter_ensemble_size, drifterPositions=np.array(init_positions))
 
 if truth_path == "NEW":
     from gpuocean.drifters import GPUDrifterCollection
     from gpuocean.utils import Observation
     from gpuocean.dataassimilation import DataAssimilationUtils as dautils
     observation_args = {'observation_type': dautils.ObservationType.UnderlyingFlow,
-                    'nx': doubleJetCase_args["nx"], 'ny': doubleJetCase_args["ny"],
-                    'domain_size_x': doubleJetCase_args["nx"]*doubleJetCase_args["dx"],
-                    'domain_size_y': doubleJetCase_args["ny"]*doubleJetCase_args["dy"],
+                    'nx': args_list[-1]["nx"], 'ny': args_list[-1]["ny"],
+                    'domain_size_x': args_list[-1]["nx"]*args_list[-1]["dx"],
+                    'domain_size_y': args_list[-1]["ny"]*args_list[-1]["dy"],
                 }
     true_trajectories = Observation.Observation(**observation_args)
 
     true_drifters = GPUDrifterCollection.GPUDrifterCollection(gpu_ctx, num_drifters, 
-                                            boundaryConditions = doubleJetCase_args["boundary_conditions"],
+                                            boundaryConditions = args_list[-1]["boundary_conditions"],
                                             domain_size_x = true_trajectories.domain_size_x,
                                             domain_size_y = true_trajectories.domain_size_y)
     

@@ -73,7 +73,7 @@ doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Ne', type=int, default=100)
+parser.add_argument('--Ne', type=int, default=50)
 parser.add_argument('--truth_path', type=str, default="NEW")
 
 pargs = parser.parse_args()
@@ -171,7 +171,8 @@ SL_ensemble = initSLensemble(100, doubleJetCase_args, doubleJetCase_init, sim_mo
 
 # %%
 # Spin up period
-truth.dataAssimilationStep(T_spinup)
+if truth_path=="NEW":
+    truth.dataAssimilationStep(T_spinup)
 SLstepToObservation(SL_ensemble, T_spinup)
 makePlots()
 
