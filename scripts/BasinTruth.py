@@ -20,11 +20,20 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/Truth/"+timestamp 
+output_path = "DataAssimilation/BasinTruth/"+timestamp 
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
-log.write("Parameters for the experimental set-up\n\n")
+log.write("Parameters \n\n")
+
+gpuocean_path = [p[:-4] for p in sys.path if (p.endswith("gpuocean/src") or p.endswith("gpuocean\\src"))][0]
+import git
+gpuocean_repo = git.Repo(gpuocean_path)
+log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
+
+repo = git.Repo(search_parent_directories=True)
+log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
+
 
 # %% [markdown]
 # GPU Ocean-modules:
@@ -47,7 +56,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 9
+L = 10
 
 # %% 
 from utils.BasinParameters import *
