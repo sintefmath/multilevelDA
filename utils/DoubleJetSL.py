@@ -167,19 +167,13 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     if localisation_weights is None:
         localisation_weights = np.ones((SL_ensemble[0].ny, SL_ensemble[0].nx))
     
-    ## Perturbations
-    if perts is not None:
-        SL_perts = perts
-    else:
-        SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
-
     ## Analysis
     obs_idxs = [Hy, Hx]
 
     X0 = SL_state
     X0mean = np.average(X0, axis=-1)
 
-    Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] + SL_perts.T
+    Y0 = SL_state[obs_var,obs_idxs[0],obs_idxs[1]] 
     Y0mean = np.average(Y0, axis=-1)[:,np.newaxis]
 
     SL_XY = (relax_factor*np.tile(localisation_weights.flatten(),3)[:,np.newaxis]
@@ -189,6 +183,12 @@ def SLEnKF(SL_ensemble, obs, obs_x, obs_y, R, obs_var,
     SL_YY = 1/SL_Ne * (Y0 - Y0mean) @ (Y0 - Y0mean).T 
 
     SL_K = SL_XY @ np.linalg.inv(SL_YY)
+
+    ## Perturbations
+    if perts is not None:
+        SL_perts = perts
+    else:
+        SL_perts = np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=SL_Ne)
 
     ## Update
     SL_state = SL_state + (SL_K @ (obs[obs_var,np.newaxis] - SL_state[obs_var,obs_idxs[0],obs_idxs[1]] - SL_perts.T))
