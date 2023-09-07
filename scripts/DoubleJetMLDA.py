@@ -232,6 +232,18 @@ while MLOceanEnsemble.t < T_spinup + T_da:
     if truth_path == "NEW":
         makeTruePlots(truth)
 
+# %% 
+# Save last state 
+def write2file(MLOceanEnsemble):
+    ML_state = MLOceanEnsemble.download()
+    write_path = os.path.join(output_path, "MLstates")
+    np.save(write_path+"/MLensemble_0_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[0]))
+    for l_idx in range(1,len(ls)):
+        np.save(output_path+"/MLensemble_"+str(l_idx)+"_0_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[l_idx][0]))
+        np.save(output_path+"/MLensemble_"+str(l_idx)+"_1_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[l_idx][1]))
+
+write2file(MLOceanEnsemble)
+
 # %%
 # Prepare drifters
 drifter_ensemble_size = 50

@@ -58,7 +58,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 9
+L = 8
 
 # %% 
 from utils.DoubleJetParametersReplication import *
@@ -74,7 +74,7 @@ doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="NEW")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-06T10_34_32")
 
 pargs = parser.parse_args()
 
@@ -110,7 +110,7 @@ log.write("Truth\n")
 if truth_path != "NEW":
     log.write("from file: " + truth_path + "\n")
 
-    truth0 = np.load(truth_path+"/truth_0.npy")
+    truth0 = np.load(truth_path+"/truth_"+str(T_spinup)+".npy")
     assert truth0.shape[1] == doubleJetCase_args["ny"], "Truth has wrong dimensions"
     assert truth0.shape[2] == doubleJetCase_args["nx"], "Truth has wrong dimensions"
 else:
@@ -214,6 +214,15 @@ while SL_ensemble[0].t < T_spinup + T_da:
     makePlots()
     if truth_path == "NEW":
         makeTruePlots(truth)
+
+# %% 
+# Save last state
+def write2file(SL_ensemble):
+    SL_state = SLdownload(SL_ensemble)
+    write_path = os.path.join(output_path, "SLstates")
+    np.save(output_path+"/SLensemble_"+str(SL_ensemble[0].t)+".npy", SL_state)
+
+write2file(SL_ensemble) 
 
 # %% 
 # Prepare drifters
