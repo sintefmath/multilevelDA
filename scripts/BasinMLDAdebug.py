@@ -78,7 +78,7 @@ from utils.BasinParameters import *
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49")
+parser.add_argument('--truth_path', type=str, default="NEW")#/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-05-16T13_18_49")
 
 pargs = parser.parse_args()
 
@@ -184,7 +184,7 @@ def makePlots(MLOceanEnsemble, ML_K, ML_K0, innov_prior, innov_posterior):
     
     # 2 var 
     MLvar  = MLOceanEnsemble.estimate(np.var)
-    fig, axs = imshow3var(MLvar, eta_vlim=0.015, huv_vlim=50)
+    fig, axs = imshow3var(MLvar, eta_vlim=0.025, huv_vlim=100)
     plt.savefig(output_path+"/MLvar_"+str(int(MLOceanEnsemble.t))+".pdf")
     plt.close('all')
    

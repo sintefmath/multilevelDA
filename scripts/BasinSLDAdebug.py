@@ -65,7 +65,7 @@ from utils.BasinParameters import *
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=100)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-06-22T13_23_51")
+parser.add_argument('--truth_path', type=str, default="NEW")#/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/Truth/2023-06-22T13_23_51")
 
 pargs = parser.parse_args()
 
