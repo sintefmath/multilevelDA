@@ -74,7 +74,7 @@ doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-06T10_34_32")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-13T11_24_38")
 
 pargs = parser.parse_args()
 
@@ -84,7 +84,6 @@ truth_path = pargs.truth_path
 # %% 
 # Assimilation
 localisation = True
-
 
 # %%
 # Book keeping
@@ -165,7 +164,7 @@ if truth_path=="NEW":
 # %%
 # Ensemble
 from utils.DoubleJetSL import * 
-SL_ensemble = initSLensemble(100, doubleJetCase_args, doubleJetCase_init, sim_model_error_basis_args, 
+SL_ensemble = initSLensemble(Ne, doubleJetCase_args, doubleJetCase_init, sim_model_error_basis_args, 
                              sim_model_error_time_step=sim_model_error_timestep)
 
 
@@ -202,7 +201,7 @@ while SL_ensemble[0].t < T_spinup + T_da:
 
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         SL_state = SLEnKF(SL_state, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
                relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
@@ -288,7 +287,7 @@ for e in range(len(SL_ensemble)):
 
 
 if truth_path == "NEW":
-    true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters"))
+    true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters.pickle"))
 
     
 # %%

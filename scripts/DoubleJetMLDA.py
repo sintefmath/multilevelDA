@@ -80,7 +80,7 @@ for l in ls:
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-06T10_34_32")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-13T11_24_38")
 
 pargs = parser.parse_args()
 
@@ -202,6 +202,9 @@ makePlots(MLOceanEnsemble)
 if truth_path == "NEW":
     makeTruePlots(truth)
 
+ml_log = open(output_path+"/MLlog.txt", 'w')
+ml_log.write("Eigenvalues of (Sigma_YY+R)\n\n")
+
 while MLOceanEnsemble.t < T_spinup + T_da:
     # Forward step
     MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
@@ -216,14 +219,17 @@ while MLOceanEnsemble.t < T_spinup + T_da:
 
     ML_state = copy.deepcopy(MLOceanEnsemble.download())
     
+    ml_log.write("\n DA at " + str(MLOceanEnsemble.t) + "\n")
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
         
+        ml_log.write("Observation " + str(h) + ":\n")
         ML_state = MLEnKF.assimilate(ML_state, obs, obs_x, obs_y, R, 
                                 r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
                                 min_localisation_level=min_location_level,
-                                precomp_GC=precomp_GC[h])
+                                precomp_GC=precomp_GC[h],
+                                log=ml_log)
     
     MLOceanEnsemble.upload(ML_state)
 
