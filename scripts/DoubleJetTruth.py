@@ -68,7 +68,7 @@ from gpuocean.utils import DoubleJetCase
 doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, 
                                             model_error=2, 
                                             ny=2**L, nx=2**(L+1))
-doubleJetCase_args, doubleJetCase_init, doubleJetCase_meargs = doubleJetCase.getInitConditions()
+doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 doubleJetCase_args["dt"] = 0.0
 
 # %%
@@ -103,7 +103,7 @@ def write2file(T):
 # %% 
 # Truth
 truth = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init) 
-truth.setKLModelError(**doubleJetCase_meargs)
+truth.setKLModelError(**sim_model_error_basis_args)
 truth.model_time_step = sim_model_error_timestep
 
 # %% 
