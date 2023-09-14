@@ -46,12 +46,12 @@ T_forecast = 6*3600
 obs_xs = [40040.0, 30040.0, 30040.0, 50040.0, 50040.0]
 obs_ys = [80040.0, 70040.0, 90040.0, 70040.0, 90040.0]
 
-R = [0.05, 1.0, 1.0]
+R = [0.5, 25.0, 25.0]
 
 # Parameters for assimilation
 obs_var = slice(1,3)
-r = 2.5e4
-relax_factor = 0.5
+r = 3.5e4
+relax_factor = 0.75
 min_location_level = 0
 
 da_timestep = 900
