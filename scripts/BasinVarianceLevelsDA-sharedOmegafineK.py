@@ -325,7 +325,7 @@ for t_idx, T in enumerate(Ts):
             true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
             for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
                 Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
-                obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+                obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
                 SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
                         relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
@@ -360,7 +360,7 @@ for t_idx, T in enumerate(Ts):
         true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
             Hx, Hy = SLobsCoord2obsIdx(truth, obs_x, obs_y)
-            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
             SL_K, SL_perts = SLEnKF(SL_ensembles[-1], obs, obs_x, obs_y, R=R, obs_var=obs_var, 
                     relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],

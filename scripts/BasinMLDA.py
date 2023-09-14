@@ -54,7 +54,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %%
-ls = [8, 9]
+ls = [6, 7, 8, 9, 10]
 
 # %%
 args_list = []
@@ -78,7 +78,7 @@ from utils.BasinParameters import *
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/BasinTruth/2023-06-22T13_47_48")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/BasinTruth/2023-09-07T11_20_08L10")
 
 pargs = parser.parse_args()
 
@@ -89,7 +89,7 @@ truth_path = pargs.truth_path
 # ## Ensemble
 
 # %% 
-ML_Nes = [100, 25]
+ML_Nes = [2045,  482,  138,   30,    6]
 
 # %%
 # Book keeping
@@ -199,7 +199,7 @@ while MLOceanEnsemble.t < T_da:
 
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
         Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         ML_state = MLEnKF.assimilate(ML_state, obs, obs_x, obs_y, R, 
                                 r=r, obs_var=slice(1,3), relax_factor=relax_factor, 

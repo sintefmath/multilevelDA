@@ -55,7 +55,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 9
+L = 10
 
 # %% 
 from utils.BasinParameters import *
@@ -65,7 +65,7 @@ from utils.BasinParameters import *
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/BasinTruth/2023-06-22T13_47_48")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/scripts/DataAssimilation/BasinTruth/2023-09-07T11_20_08L10")
 
 pargs = parser.parse_args()
 
