@@ -1,5 +1,5 @@
 # %% [markdown]
-# # Multi Level Statistics
+# Testing the number of samples that fit on GPU
 
 # %% [markdown]
 # ### Classes and modules
@@ -53,7 +53,7 @@ gpu_stream = cuda.Stream()
 
     
 # %% [markdown]
-# ## Setting-up case with different resolutions
+# Set up simulation arguments
 
 # %% 
 L = 10
@@ -101,6 +101,15 @@ sim_args = {
 sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
 
 # %%
+'''
+Requires 
+$ conda install -c fastai nvidia-ml-py3 
+or 
+$ pip install nvidia-ml-py3
+'''
+
+# %%
+# Add brute force more simulators and track GPU memory
 import nvidia_smi
 nvidia_smi.nvmlInit()
 gpu_handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
