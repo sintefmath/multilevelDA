@@ -22,6 +22,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.BasinInit import *
 from utils.BasinPlot import *
 
+# %% 
+base_path = "KGainConvergence/Basin/"
 
 # %%
 from gpuocean.utils import Common
@@ -54,7 +56,7 @@ from utils.BasinParameters import *
 # %% 
 import argparse
 parser = argparse.ArgumentParser(description='Single run inputs')
-parser.add_argument("-m", "--mode", required=True, type=str, choices=["T", "R", "SL", "ML"])
+parser.add_argument("-m", "--mode", required=True, type=str, choices=["T", "R", "SL", "ML", "MC"])
 parser.add_argument("-Ne", "--ensembleSize", nargs="*", type=int)
 
 pargs = parser.parse_args()
@@ -63,7 +65,8 @@ Nes = pargs.ensembleSize
 
 # %% 
 print("Reducing T_da for debugging purposes!")
-T_da = 3600
+# T_da = 0
+T_da = 1*3600
 
 # %%
 ##############################################
@@ -73,8 +76,8 @@ if mode == "T":
 
     def writeTruth2file(T):
         true_state = truth.download(interior_domain_only=True)
-        os.makedirs("tmpTruth", exist_ok=True)
-        np.save("tmpTruth/truth_"+str(T)+".npy", np.array(true_state))
+        os.makedirs(os.path.join(base_path,"tmpTruth"), exist_ok=True)
+        np.save(base_path+"/tmpTruth/truth_"+str(T)+".npy", np.array(true_state))
 
     data_args = make_init_steady_state(args_list[-1], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
@@ -115,10 +118,10 @@ elif mode == "R":
     # First Gain
     if T_da == 0.0:
         # Observation
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
         SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
@@ -139,18 +142,22 @@ elif mode == "R":
         SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
         
         # Observation
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
+        print("DA at t = ", SL_ensemble[0].t)
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
             Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
             SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
                 relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
 
     # Saving results
-    os.makedirs("tmpRefGain", exist_ok=True)
-    np.save("tmpRefGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SL_K)
+    os.makedirs(os.path.join(base_path,"tmpRefGain"), exist_ok=True)
+    np.save(base_path+"tmpRefGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SL_K)
+
+    os.makedirs(os.path.join(base_path,"RefGain"), exist_ok=True)
+    np.save(base_path+"/RefGain/slK_"+str(T_da)+"_"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SL_K)
 
     # Crash to let OS do the gc
     os._exit(0)
@@ -174,10 +181,10 @@ elif mode == "SL":
     # First Gain
     if T_da == 0.0:
         # Observation
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
         Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
         SL_K = SLEnKF(SL_ensemble, obs, obs_xs[0], obs_ys[0], R=R, obs_var=slice(1,3), 
@@ -198,18 +205,22 @@ elif mode == "SL":
         SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
         
         # Observation
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
+        print("DA at t = ", SL_ensemble[0].t)
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
             Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
-            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
             SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
                 relax_factor=relax_factor, localisation_weights=localisation_weights_list[h])
 
     # Saving results
-    os.makedirs("tmpSLGain", exist_ok=True)
-    np.save("tmpSLGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SL_K)
+    os.makedirs(os.path.join(base_path,"tmpSLGain"), exist_ok=True)
+    np.save(base_path+"/tmpSLGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SL_K)
+
+    os.makedirs(os.path.join(base_path,"tmpSLmean"), exist_ok=True)
+    np.save(base_path+"/tmpSLmean/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), SLestimate(SL_ensemble, np.mean))
 
     # Crash to let OS do the gc
     os._exit(0)
@@ -225,30 +236,32 @@ elif mode == "ML":
 
     # Initialisation
     data_args_list = []
-    for l_idx in range(len(args_list[start_l_idx:-1])):
+    for l_idx in range(len(args_list[start_l_idx:-1])): #TODO: Check indices 
         data_args_list.append( make_init_steady_state(args_list[start_l_idx+l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
 
-    from gpuocean.ensembles import MultiLevelOceanEnsembleCase
-    MLOceanEnsemble = MultiLevelOceanEnsembleCase.MultiLevelOceanEnsemble(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
+    from gpuocean.ensembles import MultiLevelOceanEnsemble
+    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
                                 init_model_error_basis_args=init_model_error_basis_args, 
                                 sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_timestep=sim_model_error_timestep)
 
     from gpuocean.dataassimilation import MLEnKFOcean
     MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
 
+    log = open(os.path.join(base_path, "logMLEnKF.txt"), "a")
 
     #####################
     # First Gain
     if T_da == 0.0:
         # Observation
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
         Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_xs[0], obs_ys[0])
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
         
         ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_xs[0], obs_ys[0], R, 
                                         r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
-                                        min_localisation_level=min_location_level)
+                                        min_localisation_level=min_location_level,
+                                        log=log)
 
 
 
@@ -263,20 +276,66 @@ elif mode == "ML":
         MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
 
         # DA step
-        true_eta, true_hu, true_hv = np.load("tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+        true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+
+        print("DA at t = ", MLOceanEnsemble.t)
+        
+        log.write("MLOceanEnsemble at " + str(MLOceanEnsemble.t) +"\n")
 
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
             Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
-            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.normal(0,R)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
             
+            log.write("MLEnKF for obs " + str(h) + ". ")
             ML_K = MLEnKF.assimilate(MLOceanEnsemble, obs, obs_x, obs_y, R, 
                                     r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
                                     min_localisation_level=min_location_level,
-                                    precomp_GC=precomp_GC[h])
-            
+                                    precomp_GC=precomp_GC[h],
+                                    log=log)
+    
+    log.close()
+
     # Saving results
-    os.makedirs("tmpMLGain", exist_ok=True)
-    np.save("tmpMLGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ML_K.reshape(3,MLOceanEnsemble.nys[-1],MLOceanEnsemble.nxs[-1],ML_K.shape[-1]))
+    os.makedirs(os.path.join(base_path,"tmpMLGain"), exist_ok=True)
+    np.save(base_path+"/tmpMLGain/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), ML_K.reshape(3,MLOceanEnsemble.nys[-1],MLOceanEnsemble.nxs[-1],ML_K.shape[-1]))
+
+    os.makedirs(os.path.join(base_path,"tmpMLmean"), exist_ok=True)
+    np.save(base_path+"/tmpMLmean/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), MLOceanEnsemble.estimate(np.mean))
+
+    # Crash to let OS do the gc
+    os._exit(0)
+    
+
+
+##############################################
+# MONTE CARLO
+
+elif mode == "MC":
+    
+    start_l_idx = len(args_list[:-1]) - len(Nes)
+
+    # Initialisation
+    data_args_list = []
+    for l_idx in range(len(args_list[start_l_idx:-1])): #TODO: Check indices 
+        data_args_list.append( make_init_steady_state(args_list[start_l_idx+l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
+
+    from gpuocean.ensembles import MultiLevelOceanEnsemble
+    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
+                                init_model_error_basis_args=init_model_error_basis_args, 
+                                sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_timestep=sim_model_error_timestep)
+
+
+    #####################
+    # Data assimilation
+    while MLOceanEnsemble.t < T_da:
+        # Forward step
+        MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
+
+        # DA step
+        print("no DA at t = ", MLOceanEnsemble.t)
+
+    os.makedirs(os.path.join(base_path,"tmpMLmean"), exist_ok=True)
+    np.save(base_path+"/tmpMLmean/"+datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S"), MLOceanEnsemble.estimate(np.mean))
 
     # Crash to let OS do the gc
     os._exit(0)
