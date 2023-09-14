@@ -129,27 +129,30 @@ if localisation:
 log.close()
 
 # %% 
-def write2file(T, mode=""):
-    print("Saving ", mode, " at time ", T)
 
+def write2file(SL_ensemble):
     SL_state = SLdownload(SL_ensemble)
-    np.save(output_path+"/SLensemble_"+str(T)+"_"+mode+".npy", np.array(SL_state))
-    
+    write_path = os.path.join(output_path, "SLstates")
+    os.makedirs(write_path, exist_ok=True)
+    np.save(write_path+"/SLensemble_"+str(SL_ensemble[0].t)+".npy", SL_state)
+
 # %% 
 def makeTruePlots(truth):
+    os.makedirs(output_path+"/figs", exist_ok=True)
     fig, axs = imshowSim(truth)
-    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
+    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
 
 def makePlots():
+    os.makedirs(output_path+"/figs", exist_ok=True)
     # mean
     SL_mean = SLestimate(SL_ensemble, np.mean)
     fig, axs = imshow3(SL_mean)
-    plt.savefig(output_path+"/SLmean_"+str(int(SL_ensemble[0].t))+".pdf")
+    plt.savefig(output_path+"/figs/SLmean_"+str(int(SL_ensemble[0].t))+".pdf", bbox_inches="tight")
 
     # var
     SL_std = SLestimate(SL_ensemble, np.std)
     fig, axs = imshow3var(SL_std)
-    plt.savefig(output_path+"/SLstd_"+str(int(SL_ensemble[0].t))+".pdf")
+    plt.savefig(output_path+"/figs/SLstd_"+str(int(SL_ensemble[0].t))+".pdf", bbox_inches="tight")
 
     plt.close('all')
 
@@ -216,11 +219,6 @@ while SL_ensemble[0].t < T_spinup + T_da:
 
 # %% 
 # Save last state
-def write2file(SL_ensemble):
-    SL_state = SLdownload(SL_ensemble)
-    write_path = os.path.join(output_path, "SLstates")
-    np.save(output_path+"/SLensemble_"+str(SL_ensemble[0].t)+".npy", SL_state)
-
 write2file(SL_ensemble) 
 
 # %% 
@@ -282,24 +280,11 @@ while SL_ensemble[0].t < T_da + T_forecast:
 # Saving results
 drifter_folder = os.path.join(output_path, 'sldrifters')
 os.makedirs(drifter_folder)
-for e in range(len(SL_ensemble)):
-    forecasts[e].to_pickle(os.path.join(drifter_folder,"sldrifters_"+str(e).zfill(4)))
-
 
 if truth_path == "NEW":
     true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters.pickle"))
 
-    
-# %%
-for drifter_id in range(len(init_positions)): 
-    fig, ax = plt.subplots(1,1, figsize=(10,10))
-    domain_extent = [0, SL_ensemble[0].nx*SL_ensemble[0].dx/1000, 0, SL_ensemble[0].ny*SL_ensemble[0].dy/1000]
+for e in range(len(SL_ensemble)):
+    forecasts[e].to_pickle(os.path.join(drifter_folder,"sldrifters_"+str(e).zfill(4)+".pickle"))
 
-    ax.imshow(np.zeros((doubleJetCase_args["ny"], doubleJetCase_args["nx"])), interpolation="none", origin='lower', 
-                cmap=plt.cm.Oranges, extent=domain_extent, zorder=-10)
 
-    for forecast in forecasts:
-        path = forecast.get_drifter_path(drifter_id, 0,  SL_ensemble[0].t, in_km = True)[0]
-        ax.plot(path[:,0], path[:,1], color="C"+str(drifter_id), ls="-", zorder=-3)
-
-    plt.savefig(output_path+"/drift_"+str(drifter_id)+".pdf", bbox_inches="tight")

@@ -145,22 +145,24 @@ def write2file(T):
 
 
 def makeTruePlots(truth):
+    os.makedirs(output_path+"/figs", exist_ok=True)
     fig, axs = imshowSim(truth)
-    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf")
+    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf")
 
 
 
 def makePlots(MLOceanEnsemble):
+    os.makedirs(output_path+"/figs", exist_ok=True)
     # 1 mean
     MLmean = MLOceanEnsemble.estimate(np.mean)
     fig, axs = imshow3(MLmean)
-    plt.savefig(output_path+"/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.savefig(output_path+"/figs/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf")
     plt.close('all')
 
     # 2 var 
     MLstd  = MLOceanEnsemble.estimate(np.std)
     fig, axs = imshow3var(MLstd)
-    plt.savefig(output_path+"/MLvar_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.savefig(output_path+"/figs/MLstd_"+str(int(MLOceanEnsemble.t))+".pdf")
     plt.close('all')
    
 
@@ -240,15 +242,7 @@ while MLOceanEnsemble.t < T_spinup + T_da:
 
 # %% 
 # Save last state 
-def write2file(MLOceanEnsemble):
-    ML_state = MLOceanEnsemble.download()
-    write_path = os.path.join(output_path, "MLstates")
-    np.save(write_path+"/MLensemble_0_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[0]))
-    for l_idx in range(1,len(ls)):
-        np.save(output_path+"/MLensemble_"+str(l_idx)+"_0_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[l_idx][0]))
-        np.save(output_path+"/MLensemble_"+str(l_idx)+"_1_"+str(MLOceanEnsemble.t)+".npy", np.array(ML_state[l_idx][1]))
-
-write2file(MLOceanEnsemble)
+MLOceanEnsemble.save2file(os.path.join(output_path, "MLstates"))
 
 # %%
 # Prepare drifters
