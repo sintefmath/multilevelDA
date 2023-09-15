@@ -99,7 +99,7 @@ def write2file(T):
     true_state = truth.download(interior_domain_only=True)
     np.save(output_path+"/truth_"+str(T)+".npy", np.array(true_state))
     
-
+os.makedirs(output_path+"/figs")
 # %% 
 # Truth
 truth = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init) 
@@ -119,7 +119,7 @@ while truth.t < T_spinup + T_da:
     write2file(int(truth.t))
 
     imshowSim(truth)
-    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
+    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
     plt.close("all")
 
 
@@ -147,7 +147,7 @@ truth.attachDrifters(drifters)
 forecast.add_observation_from_sim(truth)
 
 # %% 
-while truth.t < T_da + T_forecast:
+while truth.t < T_spinup + T_da + T_forecast:
     # Forward step
     truth.dataAssimilationStep(truth.t+300)
     forecast.add_observation_from_sim(truth)
@@ -156,7 +156,7 @@ while truth.t < T_da + T_forecast:
     write2file(int(truth.t))
 
     imshowSim(truth)
-    plt.savefig(output_path+"/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
+    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
     plt.close("all")
 
 # %% 

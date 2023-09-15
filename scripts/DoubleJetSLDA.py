@@ -74,7 +74,7 @@ doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-13T11_24_38")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T14_23_10")
 
 pargs = parser.parse_args()
 
@@ -263,7 +263,7 @@ if truth_path == "NEW":
 
 # %%
 # Forecast period
-while SL_ensemble[0].t < T_da + T_forecast:
+while SL_ensemble[0].t < T_spinup + T_da + T_forecast:
 
     SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
     for e in range(len(SL_ensemble)):

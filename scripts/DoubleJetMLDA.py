@@ -80,7 +80,7 @@ for l in ls:
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-13T11_24_38")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T14_23_10")
 
 pargs = parser.parse_args()
 
@@ -92,6 +92,13 @@ truth_path = pargs.truth_path
 
 # %% 
 ML_Nes = [100, 25]
+
+
+# %% 
+# min_location_level = 1
+xorwow_seeds = [None, None]
+np_seeds = [None, None]
+enkf_seed = None
 
 # %%
 # Book keeping
@@ -147,7 +154,7 @@ def write2file(T):
 def makeTruePlots(truth):
     os.makedirs(output_path+"/figs", exist_ok=True)
     fig, axs = imshowSim(truth)
-    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf")
+    plt.savefig(output_path+"/figs/truth_"+str(int(truth.t))+".pdf", bbox_inches="tight")
 
 
 
@@ -156,13 +163,13 @@ def makePlots(MLOceanEnsemble):
     # 1 mean
     MLmean = MLOceanEnsemble.estimate(np.mean)
     fig, axs = imshow3(MLmean)
-    plt.savefig(output_path+"/figs/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.savefig(output_path+"/figs/MLmean_"+str(int(MLOceanEnsemble.t))+".pdf", bbox_inches="tight")
     plt.close('all')
 
     # 2 var 
     MLstd  = MLOceanEnsemble.estimate(np.std)
     fig, axs = imshow3var(MLstd)
-    plt.savefig(output_path+"/figs/MLstd_"+str(int(MLOceanEnsemble.t))+".pdf")
+    plt.savefig(output_path+"/figs/MLstd_"+str(int(MLOceanEnsemble.t))+".pdf", bbox_inches="tight")
     plt.close('all')
    
 
@@ -179,7 +186,8 @@ if truth_path=="NEW":
 from utils.DoubleJetEnsembleInit import *
 ML_ensemble = initMLensemble(ML_Nes, args_list, init_list,
                              sim_model_error_basis_args=sim_model_error_basis_args, 
-                             sim_model_error_time_step=sim_model_error_timestep)
+                             sim_model_error_time_step=sim_model_error_timestep,
+                             xorwow_seeds=xorwow_seeds, np_seeds=np_seeds)
 
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
@@ -187,7 +195,7 @@ MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsemble(ML_ensemble)
 
 # %%
 from gpuocean.dataassimilation import MLEnKFOcean
-MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble)
+MLEnKF = MLEnKFOcean.MLEnKFOcean(MLOceanEnsemble, seed=enkf_seed)
 
 precomp_GC = []
 for obs_x, obs_y in zip(obs_xs, obs_ys):
