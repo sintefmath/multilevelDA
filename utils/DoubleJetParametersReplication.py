@@ -40,7 +40,7 @@ R = [0.5, 500, 500]
 obs_var = slice(1,3)
 r = 5e4
 relax_factor = 0.25
-min_location_level = 1
+min_location_level = 0
 
 da_timestep = 900
 
