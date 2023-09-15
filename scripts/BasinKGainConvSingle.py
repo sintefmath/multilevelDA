@@ -18,7 +18,7 @@ import pycuda.driver as cuda
 # GPU Ocean-modules:
 
 # %%
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.realpath(os.path.dirname(__file__)), '../')))
 from utils.BasinInit import *
 from utils.BasinPlot import *
 

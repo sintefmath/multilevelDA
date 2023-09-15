@@ -40,7 +40,8 @@ import git
 gpuocean_repo = git.Repo(gpuocean_path)
 log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
 
-repo = git.Repo(search_parent_directories=True)
+script_path = os.path.realpath(os.path.dirname(__file__))
+repo = git.Repo(script_path, search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
 
 
@@ -52,7 +53,7 @@ from gpuocean.utils import Common
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+sys.path.insert(0, os.path.abspath(os.path.join(script_path, '../')))
 from utils.BasinInit import *
 from utils.BasinPlot import *
 from utils.BasinAnalysis import *
@@ -91,13 +92,13 @@ for l in ls:
 # ### Multi-Level Ensemble Sizes 
 
 # %%
-source_path = "/home/florianb/havvarsel/multilevelDA/scripts/VarianceLevelsDA/Basin/2023-06-28T11_25_15sharedOmegaLocalised"
+source_path = script_path+"/VarianceLevelsDA/Basin/2023-09-14T18_10_00"
 
-center_vars = np.load(source_path+"/center_vars_21600_L2norm.npy")[start_l_idx:-1]
-center_diff_vars = np.load(source_path+"/center_diff_vars_21600_L2norm.npy")[start_l_idx:-1]
+center_vars = np.load(source_path+"/center_vars_21600.npy")[start_l_idx:-1]
+center_diff_vars = np.load(source_path+"/center_diff_vars_21600.npy")[start_l_idx:-1]
 
 # %%
-work_path = "/home/florianb/havvarsel/multilevelDA/scripts/PracticalCost/Basin/2023-06-29T14_54_02"
+work_path = script_path+"/PracticalCost/Basin/2023-06-29T14_54_02"
 
 # %%
 def raw2costsEnsemble(filename):
@@ -193,7 +194,7 @@ if os.path.isdir("tmpTruth"):
     for f in os.listdir("tmpTruth"):
         os.remove(os.path.join("tmpTruth", f))
 
-os.system("python BasinKGainConvSingle.py -m T")
+os.system("python "+script_path+"/BasinKGainConvSingle.py -m T")
 
 
 ########################################
@@ -204,7 +205,7 @@ if os.path.isdir("tmpRefGain"):
     for f in os.listdir("tmpRefGain"):
         os.remove(os.path.join("tmpRefGain", f))
 
-os.system("python BasinKGainConvSingle.py -m R")
+os.system("python "+script_path+"/BasinKGainConvSingle.py -m R")
 
 f = os.listdir("tmpRefGain")[0]
 refK_eta, refK_hu, refK_hv = np.load(os.path.join("tmpRefGain", f))[:,:,:,0] #block_reduce(np.load(os.path.join("tmpRefGain", f))[:,:,:,0], block_size=(1,2,2), func=np.mean)
@@ -213,7 +214,7 @@ fig, axs = imshow3([refK_eta, refK_hu, refK_hv], eta_vlim=1e-2,huv_vlim=1)
 fig.savefig(output_path+"/GainFigs/Ref")
 plt.close("all")
 
-
+sys.exit(0)
 # %%
 ###########################################
 # tau-LOOP
