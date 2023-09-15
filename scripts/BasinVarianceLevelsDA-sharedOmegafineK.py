@@ -36,7 +36,7 @@ import git
 gpuocean_repo = git.Repo(gpuocean_path)
 log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
 
-repo = git.Repo(search_parent_directories=True)
+repo = git.Repo(os.path.realpath(os.path.dirname(__file__)), search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
 
 log.write("Script " + str(os.path.basename(__file__))+ "\n\n")
@@ -52,7 +52,7 @@ from gpuocean.utils import Common
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.realpath(os.path.dirname(__file__)), '../')))
 from utils.BasinInit import *
 from utils.BasinSL import *
 # %%
