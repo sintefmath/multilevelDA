@@ -192,6 +192,16 @@ log.write("KL bases y end: " + str(sim_model_error_basis_args["basis_y_end"]) + 
 log.write("KL decay: " + str(sim_model_error_basis_args["kl_decay"]) +"\n")
 log.write("KL scaling: " + str(sim_model_error_basis_args["kl_scaling"]) + "\n\n")
 
+log.write("obs_x, obs_y: " + " / ".join([str(obs_x) + ", " + str(obs_y)   for obs_x, obs_y in zip(obs_xs,obs_ys)]) + "\n")
+log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
+
+log.write("Assimilation\n")
+log.write("DA time steps: " + str(da_timestep) + "\n")
+log.write("obs_var = slice(1,3)\n")
+log.write("r = " +str(r) + "\n")
+log.write("relax_factor = " + str(relax_factor) +"\n")
+
+
 log.write("Statistics\n")
 N_exp = 25
 log.write("N_exp = " + str(N_exp) + "\n")
@@ -272,7 +282,7 @@ plt.close("all")
 
 
 
-
+sys.exit(0)
 
 
 
@@ -568,8 +578,8 @@ def clean_tmp(dirname):
     if os.path.isdir(dirpath):
         os.rmdir(dirpath)
 
-clean_tmp("tmpTruth")
-clean_tmp("tmpRefGain")
+# clean_tmp("tmpTruth")
+# clean_tmp("tmpRefGain")
 
 clean_tmp("tmpSLGain")
 clean_tmp("tmpSLmean")
