@@ -57,7 +57,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %%
-ls = [7, 8]
+ls = [6, 7, 8]
 
 # %% 
 from utils.DoubleJetParametersReplication import * 
@@ -80,7 +80,7 @@ for l in ls:
 # Flags for model error
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T14_23_10")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08")
 
 pargs = parser.parse_args()
 
@@ -91,14 +91,19 @@ truth_path = pargs.truth_path
 # ## Ensemble
 
 # %% 
-ML_Nes = [100, 25]
+ML_Nes = [200, 50, 20]
 
 
 # %% 
-# min_location_level = 1
-xorwow_seeds = [None, None]
-np_seeds = [None, None]
+xorwow_seeds = len(ls)*[None]
+np_seeds = len(ls)*[None]
 enkf_seed = None
+
+# min_location_level = 1
+# xorwow_seeds = [1, 2]
+# np_seeds = [3, 4]
+# enkf_seed = 5
+
 
 # %%
 # Book keeping

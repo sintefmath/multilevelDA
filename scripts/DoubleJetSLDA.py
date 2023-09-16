@@ -74,7 +74,7 @@ doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 import argparse
 parser = argparse.ArgumentParser(description='Generate an ensemble.')
 parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T14_23_10")
+parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08")
 
 pargs = parser.parse_args()
 
@@ -172,7 +172,9 @@ SL_ensemble = initSLensemble(Ne, doubleJetCase_args, doubleJetCase_init, sim_mod
 
 
 # %%
+##########################
 # Spin up period
+
 if truth_path=="NEW":
     truth.dataAssimilationStep(T_spinup)
 SLstepToObservation(SL_ensemble, T_spinup)
@@ -185,6 +187,7 @@ if localisation:
         localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
 
 # %% 
+#########################
 # DA period
 
 while SL_ensemble[0].t < T_spinup + T_da:
@@ -275,7 +278,7 @@ while SL_ensemble[0].t < T_spinup + T_da + T_forecast:
 
     # write2file(int(SL_ensemble[0].t), "")
     if SL_ensemble[0].t % 3600 < 0.1:
-        makePlots(None)
+        makePlots()
 
 # Saving results
 drifter_folder = os.path.join(output_path, 'sldrifters')
