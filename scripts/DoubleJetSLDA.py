@@ -58,7 +58,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 6
+L = 8
 
 # %% 
 from utils.DoubleJetParametersReplication import *
@@ -70,7 +70,7 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-Ne = 150
+Ne = 30
 truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
 
 # %% 
@@ -149,7 +149,7 @@ def write2file(SL_ensemble):
     SL_state = SLdownload(SL_ensemble)
     write_path = os.path.join(output_path, "SLstates")
     os.makedirs(write_path, exist_ok=True)
-    np.save(write_path+"/SLensemble_"+str(SL_ensemble[0].t)+".npy", SL_state)
+    np.save(write_path+"/SLensemble_"+str(int(SL_ensemble[0].t))+".npy", SL_state)
 
 # %% 
 def makeTruePlots(truth):
@@ -220,7 +220,7 @@ while SL_ensemble[0].t < T_spinup + T_da:
 
         SL_state = SLEnKF(SL_state, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
                relax_factor=relax_factor, localisation_weights=localisation_weights_list[h],
-               dx=SL_ensemble[h].dx, dy=SL_ensemble[h].dy)
+               dx=SL_ensemble[0].dx, dy=SL_ensemble[0].dy)
         
     SLupload(SL_ensemble, SL_state)
 
