@@ -21,7 +21,7 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/DoubleJetSL/"+timestamp 
+output_path = "DataAssimilation/SLDA/"+timestamp 
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
