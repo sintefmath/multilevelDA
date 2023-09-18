@@ -58,7 +58,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 8
+L = 6
 
 # %% 
 from utils.DoubleJetParametersReplication import *
@@ -69,17 +69,21 @@ from gpuocean.utils import DoubleJetCase
 doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**L, nx=2**(L+1))
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
+# %%
+Ne = 150
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
+
 # %% 
 # Flags for model error
-import argparse
-parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--Ne', type=int, default=50)
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08")
+# import argparse
+# parser = argparse.ArgumentParser(description='Generate an ensemble.')
+# parser.add_argument('--Ne', type=int, default=50)
+# parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08")
 
-pargs = parser.parse_args()
+# pargs = parser.parse_args()
 
-Ne = pargs.Ne
-truth_path = pargs.truth_path
+# Ne = pargs.Ne
+# truth_path = pargs.truth_path
 
 # %% 
 # Assimilation
@@ -109,11 +113,22 @@ log.write("Truth\n")
 if truth_path != "NEW":
     log.write("from file: " + truth_path + "\n")
 
+    # Load to get some parameters
     truth0 = np.load(truth_path+"/truth_"+str(T_spinup)+".npy")
-    assert truth0.shape[1] == doubleJetCase_args["ny"], "Truth has wrong dimensions"
-    assert truth0.shape[2] == doubleJetCase_args["nx"], "Truth has wrong dimensions"
+    true_ny = truth0.shape[1]
+    true_nx = truth0.shape[2]
+
+    true_doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=true_ny, nx=true_nx)
+    true_doubleJetCase_args, true_doubleJetCase_init, _ = true_doubleJetCase.getInitConditions()
+    truth = CDKLM16.CDKLM16(**true_doubleJetCase_args, **true_doubleJetCase_init)
+
 else:
-    log.write("saved to file\n")
+    log.write("Generated on-the-fly and saved to file\n")
+
+    truth = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init)
+    truth.updateDt()
+    truth.setKLModelError(**sim_model_error_basis_args)
+    truth.model_time_step = sim_model_error_timestep
 
 
 log.write("obs_x, obs_y: " + " / ".join([str(obs_x) + ", " + str(obs_y)   for obs_x, obs_y in zip(obs_xs,obs_ys)]) + "\n")
@@ -157,13 +172,6 @@ def makePlots():
     plt.close('all')
 
 
-# %% 
-if truth_path=="NEW":
-    truth = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init)
-    truth.updateDt()
-    truth.setKLModelError(**sim_model_error_basis_args)
-    truth.model_time_step = sim_model_error_timestep
-
 # %%
 # Ensemble
 from utils.DoubleJetSL import * 
@@ -191,22 +199,23 @@ if localisation:
 # DA period
 
 while SL_ensemble[0].t < T_spinup + T_da:
+    
     # Forward step
     SLstepToObservation(SL_ensemble, SL_ensemble[0].t + da_timestep)
 
-    # DA step
-    print("DA at ", SL_ensemble[0].t)
-    # write2file(int(truth.t), "prior")
     if truth_path == "NEW":
         truth.dataAssimilationStep(truth.t + da_timestep)
         true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
     else:
         true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
     
+    # DA step
+    print("DA at ", SL_ensemble[0].t)
+
     SL_state = copy.deepcopy(SLdownload(SL_ensemble))
 
     for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-        Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+        Hx, Hy = SLobsCoord2obsIdx([truth], obs_x, obs_y)
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         SL_state = SLEnKF(SL_state, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
@@ -214,7 +223,7 @@ while SL_ensemble[0].t < T_spinup + T_da:
                dx=SL_ensemble[h].dx, dy=SL_ensemble[h].dy)
         
     SLupload(SL_ensemble, SL_state)
-    # write2file(int(truth.t), "posterior")
+
 
     makePlots()
     if truth_path == "NEW":
