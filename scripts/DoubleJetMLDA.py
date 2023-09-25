@@ -57,7 +57,18 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %%
-ls = [6, 7, 8]
+import argparse
+parser = argparse.ArgumentParser(description='Ensemble inputs')
+parser.add_argument("-ls", "--level", required=True, nargs="*", type=int, default=[7, 8])
+parser.add_argument("-Ne", "--ensembleSize", required=True, nargs="*", type=int, default=[50, 25])
+
+pargs = parser.parse_args()
+ls = pargs.level
+ML_Nes = pargs.ensembleSize
+
+assert len(ls) == len(ML_Nes), "Non-matching levels and ensemble sizes"
+# ls = [7, 8]
+# ML_Nes = [100, 25]
 
 # %% 
 from utils.DoubleJetParametersReplication import * 
@@ -77,22 +88,11 @@ for l in ls:
 
 
 # %% 
-# Flags for model error
-import argparse
-parser = argparse.ArgumentParser(description='Generate an ensemble.')
-parser.add_argument('--truth_path', type=str, default="/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08")
-
-pargs = parser.parse_args()
-
-truth_path = pargs.truth_path
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
 
 
 # %% [markdown] 
 # ## Ensemble
-
-# %% 
-ML_Nes = [200, 50, 20]
-
 
 # %% 
 xorwow_seeds = len(ls)*[None]

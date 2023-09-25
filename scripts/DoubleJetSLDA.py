@@ -58,7 +58,14 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 8
+import argparse
+parser = argparse.ArgumentParser(description='Ensemble inputs')
+parser.add_argument("-L", "--level", required=True, type=int, default=8)
+parser.add_argument("-Ne", "--ensembleSize", required=True, type=int, default=50)
+
+pargs = parser.parse_args()
+L = pargs.level
+Ne = pargs.ensembleSize
 
 # %% 
 from utils.DoubleJetParametersReplication import *
@@ -70,7 +77,6 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-Ne = 30
 truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
 
 # %% 
