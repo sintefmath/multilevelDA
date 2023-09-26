@@ -77,7 +77,7 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-25T15_21_34"
 
 # %% 
 # Flags for model error
