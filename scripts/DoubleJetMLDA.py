@@ -96,7 +96,7 @@ for l in ls:
 
 
 # %% 
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-25T15_21_34"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-26T14_05_06"
 
 
 # %% [markdown] 
@@ -220,6 +220,13 @@ if truth_path=="NEW":
 MLOceanEnsemble.stepToObservation(T_spinup)
 
 # %% 
+# DA recording 
+def L2norm(fields):
+    return np.sqrt(np.sum((fields)**2 * args_list[-1]["dx"]*args_list[-1]["dy"], axis=(1,2)))
+
+rmses = []
+
+# %% 
 # DA period
 try:
     signal.alarm(6*3600)
@@ -259,10 +266,13 @@ try:
         
         MLOceanEnsemble.upload(ML_state)
 
-        # if (MLOceanEnsemble.t % (6*3600) == 0):
+
         makePlots(MLOceanEnsemble)
         if truth_path == "NEW":
             makeTruePlots(truth)
+
+        if MLOceanEnsemble.t % 3600 == 0: 
+            rmses.append(L2norm(MLOceanEnsemble.estimate(np.mean) - [true_eta, true_hu, true_hv]))
 
     signal.alarm(0)
 
@@ -276,6 +286,8 @@ except Exception as exc:
 # %% 
 # Save last state 
 MLOceanEnsemble.save2file(os.path.join(output_path, "MLstates"))
+
+np.savetxt(output_path+"/rmse.txt", np.array(rmses))
 
 # %%
 # Prepare drifters
