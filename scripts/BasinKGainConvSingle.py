@@ -32,22 +32,22 @@ gpu_ctx = Common.CUDAContext()
 gpu_stream = cuda.Stream()
 
 # %%
-ls = [6, 7, 8, 9, 10]
+# ls = [6, 7, 8, 9, 10]
 
 # %%
-args_list = []
+# args_list = []
 
-for l in ls:
-    lvl_grid_args = initGridSpecs(l)
-    args_list.append( {
-        "nx": lvl_grid_args["nx"],
-        "ny": lvl_grid_args["ny"],
-        "dx": lvl_grid_args["dx"],
-        "dy": lvl_grid_args["dy"],
-        "gpu_ctx": gpu_ctx,
-        "gpu_stream": gpu_stream,
-        "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
-        } )
+# for l in ls:
+#     lvl_grid_args = initGridSpecs(l)
+#     args_list.append( {
+#         "nx": lvl_grid_args["nx"],
+#         "ny": lvl_grid_args["ny"],
+#         "dx": lvl_grid_args["dx"],
+#         "dy": lvl_grid_args["dy"],
+#         "gpu_ctx": gpu_ctx,
+#         "gpu_stream": gpu_stream,
+#         "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+#         } )
 
 # %%
 from utils.BasinParameters import * 
@@ -58,10 +58,14 @@ import argparse
 parser = argparse.ArgumentParser(description='Single run inputs')
 parser.add_argument("-m", "--mode", required=True, type=str, choices=["T", "R", "SL", "ML", "MC"])
 parser.add_argument("-Ne", "--ensembleSize", nargs="*", type=int)
+parser.add_argument("-ls", "--MLlevels", nargs="*", type=int)
+parser.add_argument("-L", "--SLlevel", type=int, default=9)
 
 pargs = parser.parse_args()
 mode = pargs.mode
 Nes = pargs.ensembleSize
+SL_level = pargs.SLlevel
+ML_levels = pargs.MLlevels
 
 # %% 
 print("Reducing T_da for debugging purposes!")
@@ -74,19 +78,30 @@ T_da = 1*3600
 
 if mode == "T": 
 
+    grid_args = initGridSpecs(10)
+    args =  {
+        "nx": grid_args["nx"],
+        "ny": grid_args["ny"],
+        "dx": grid_args["dx"],
+        "dy": grid_args["dy"],
+        "gpu_ctx": gpu_ctx,
+        "gpu_stream": gpu_stream,
+        "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+        } 
+
     def writeTruth2file(T):
         true_state = truth.download(interior_domain_only=True)
         os.makedirs(os.path.join(base_path,"tmpTruth"), exist_ok=True)
         np.save(base_path+"/tmpTruth/truth_"+str(T)+".npy", np.array(true_state))
 
-    data_args = make_init_steady_state(args_list[-1], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
+    data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
 
     from gpuocean.SWEsimulators import ModelErrorKL
-    init_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **init_model_error_basis_args)
-    sim_mekl = ModelErrorKL.ModelErrorKL(**args_list[-1], **sim_model_error_basis_args)
+    init_mekl = ModelErrorKL.ModelErrorKL(**args, **init_model_error_basis_args)
+    sim_mekl = ModelErrorKL.ModelErrorKL(**args, **sim_model_error_basis_args)
 
-    truth = make_sim(args_list[-1], sample_args=sample_args, init_fields=data_args)
+    truth = make_sim(args, sample_args=sample_args, init_fields=data_args)
     init_mekl.perturbSim(truth)
     truth.model_error = sim_mekl
     truth.model_time_step = sim_model_error_timestep
@@ -104,12 +119,24 @@ if mode == "T":
 # REFERENCE 
 
 elif mode == "R":
+
+    grid_args = initGridSpecs(10)
+    args =  {
+        "nx": grid_args["nx"],
+        "ny": grid_args["ny"],
+        "dx": grid_args["dx"],
+        "dy": grid_args["dy"],
+        "gpu_ctx": gpu_ctx,
+        "gpu_stream": gpu_stream,
+        "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+        } 
+
     #############################
     # Initialisation
-    data_args = make_init_steady_state(args_list[-1], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
+    data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
     from utils.BasinSL import *
-    SL_ensemble = initSLensemble(250, args_list[-1], data_args, sample_args, 
+    SL_ensemble = initSLensemble(250, args, data_args, sample_args, 
                              init_model_error_basis_args=init_model_error_basis_args, 
                              sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
 
@@ -168,14 +195,30 @@ elif mode == "R":
 # SINGLE LEVEL
 
 elif mode == "SL":
+
+    grid_args = initGridSpecs(SL_level)
+    args =  {
+        "nx": grid_args["nx"],
+        "ny": grid_args["ny"],
+        "dx": grid_args["dx"],
+        "dy": grid_args["dy"],
+        "gpu_ctx": gpu_ctx,
+        "gpu_stream": gpu_stream,
+        "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+        } 
+    
     #####################
     # Initialisation
-    data_args = make_init_steady_state(args_list[-2], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
+    data_args = make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist)
 
     from utils.BasinSL import *
-    SL_ensemble = initSLensemble(Nes[0], args_list[-2], data_args, sample_args, 
+    SL_ensemble = initSLensemble(Nes[0], args, data_args, sample_args, 
                              init_model_error_basis_args=init_model_error_basis_args, 
                              sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_time_step=sim_model_error_timestep)
+
+    dummy_truth = make_sim(args, 
+                           sample_args=sample_args, 
+                           init_fields=make_init_steady_state(args, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist))
 
     #####################
     # First Gain
@@ -183,7 +226,7 @@ elif mode == "SL":
         # Observation
         true_eta, true_hu, true_hv = np.load(base_path+"/tmpTruth/truth_"+str(int(SL_ensemble[0].t))+".npy")
         
-        Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_xs[0], obs_ys[0])
+        Hx, Hy = SLobsCoord2obsIdx([dummy_truth], obs_xs[0], obs_ys[0])
         obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
         localisation_weights = GCweights(SL_ensemble, obs_xs[0], obs_ys[0], r) 
@@ -209,7 +252,7 @@ elif mode == "SL":
         
         print("DA at t = ", SL_ensemble[0].t)
         for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-            Hx, Hy = SLobsCoord2obsIdx(SL_ensemble, obs_x, obs_y)
+            Hx, Hy = SLobsCoord2obsIdx([dummy_truth], obs_x, obs_y)
             obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
 
             SL_K = SLEnKF(SL_ensemble, obs, obs_x, obs_y, R=R, obs_var=slice(1,3), 
@@ -232,15 +275,28 @@ elif mode == "SL":
 
 elif mode == "ML":
     
-    start_l_idx = len(args_list[:-1]) - len(Nes)
+    ls = ML_levels
+
+    args_list = []
+    for l in ls:
+        lvl_grid_args = initGridSpecs(l)
+        args_list.append( {
+            "nx": lvl_grid_args["nx"],
+            "ny": lvl_grid_args["ny"],
+            "dx": lvl_grid_args["dx"],
+            "dy": lvl_grid_args["dy"],
+            "gpu_ctx": gpu_ctx,
+            "gpu_stream": gpu_stream,
+            "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+            } )
 
     # Initialisation
     data_args_list = []
-    for l_idx in range(len(args_list[start_l_idx:-1])): #TODO: Check indices 
-        data_args_list.append( make_init_steady_state(args_list[start_l_idx+l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
+    for l_idx in range(len(ls)): 
+        data_args_list.append( make_init_steady_state(args_list[l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
 
     from gpuocean.ensembles import MultiLevelOceanEnsemble
-    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
+    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list, data_args_list, sample_args, make_sim,
                                 init_model_error_basis_args=init_model_error_basis_args, 
                                 sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_timestep=sim_model_error_timestep)
 
@@ -312,15 +368,28 @@ elif mode == "ML":
 
 elif mode == "MC":
     
-    start_l_idx = len(args_list[:-1]) - len(Nes)
+    ls = [6, 7, 8, 9]
+
+    args_list = []
+    for l in ls:
+        lvl_grid_args = initGridSpecs(l)
+        args_list.append( {
+            "nx": lvl_grid_args["nx"],
+            "ny": lvl_grid_args["ny"],
+            "dx": lvl_grid_args["dx"],
+            "dy": lvl_grid_args["dy"],
+            "gpu_ctx": gpu_ctx,
+            "gpu_stream": gpu_stream,
+            "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
+            } )
 
     # Initialisation
     data_args_list = []
-    for l_idx in range(len(args_list[start_l_idx:-1])): #TODO: Check indices 
-        data_args_list.append( make_init_steady_state(args_list[start_l_idx+l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
+    for l_idx in range(len(args_list)): #TODO: Check indices 
+        data_args_list.append( make_init_steady_state(args_list, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
 
     from gpuocean.ensembles import MultiLevelOceanEnsemble
-    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list[start_l_idx:-1], data_args_list, sample_args, make_sim,
+    MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list, data_args_list, sample_args, make_sim,
                                 init_model_error_basis_args=init_model_error_basis_args, 
                                 sim_model_error_basis_args=sim_model_error_basis_args, sim_model_error_timestep=sim_model_error_timestep)
 
