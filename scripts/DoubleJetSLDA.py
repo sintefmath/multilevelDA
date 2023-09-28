@@ -77,7 +77,7 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-26T14_05_06"
 
 # %% 
 # Flags for model error
@@ -136,6 +136,7 @@ else:
     truth.setKLModelError(**sim_model_error_basis_args)
     truth.model_time_step = sim_model_error_timestep
 
+scale2truth_factor = int(np.log2(truth.nx/doubleJetCase_args["nx"])) 
 
 log.write("obs_x, obs_y: " + " / ".join([str(obs_x) + ", " + str(obs_y)   for obs_x, obs_y in zip(obs_xs,obs_ys)]) + "\n")
 log.write("R = " + ", ".join([str(Rii) for Rii in R])+"\n\n")
@@ -201,6 +202,13 @@ if localisation:
         localisation_weights_list.append( GCweights(SL_ensemble, obs_x, obs_y, r) ) 
 
 # %% 
+# DA recording 
+def L2norm(fields):
+    return np.sqrt(np.sum((fields)**2 * truth.dx*truth.dy, axis=(1,2)))
+
+rmses = []
+
+# %% 
 #########################
 # DA period
 
@@ -235,9 +243,14 @@ while SL_ensemble[0].t < T_spinup + T_da:
     if truth_path == "NEW":
         makeTruePlots(truth)
 
+    if SL_ensemble[0].t % 3600 == 0: 
+        rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
+
 # %% 
 # Save last state
 write2file(SL_ensemble) 
+
+np.savetxt(output_path+"/rmse.txt", np.array(rmses))
 
 # %% 
 # Prepare drifters

@@ -17,6 +17,14 @@ from matplotlib import pyplot as plt
 
 import pycuda.driver as cuda
 
+# %% 
+import signal
+
+def handler(signum, frame):
+    raise Exception("Time Out: Experiment aborted!")
+
+signal.signal(signal.SIGALRM, handler)
+
 # %%
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -88,7 +96,7 @@ for l in ls:
 
 
 # %% 
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-15T15_08_08"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-26T14_05_06"
 
 
 # %% [markdown] 
@@ -212,50 +220,74 @@ if truth_path=="NEW":
 MLOceanEnsemble.stepToObservation(T_spinup)
 
 # %% 
+# DA recording 
+def L2norm(fields):
+    return np.sqrt(np.sum((fields)**2 * args_list[-1]["dx"]*args_list[-1]["dy"], axis=(1,2)))
+
+rmses = []
+
+# %% 
 # DA period
-makePlots(MLOceanEnsemble)
-if truth_path == "NEW":
-    makeTruePlots(truth)
+try:
+    signal.alarm(6*3600)
 
-ml_log = open(output_path+"/MLlog.txt", 'w')
-ml_log.write("Eigenvalues of (Sigma_YY+R)\n\n")
-
-while MLOceanEnsemble.t < T_spinup + T_da:
-    # Forward step
-    MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
-
-    # DA step
-    print("DA at ", MLOceanEnsemble.t)
-    if truth_path == "NEW":
-        truth.dataAssimilationStep(truth.t + da_timestep)
-        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-    else:
-        true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
-
-    ML_state = copy.deepcopy(MLOceanEnsemble.download())
-    
-    ml_log.write("\n DA at " + str(MLOceanEnsemble.t) + "\n")
-    for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
-        Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
-        obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
-        
-        ml_log.write("Observation " + str(h) + ":\n")
-        ML_state = MLEnKF.assimilate(ML_state, obs, obs_x, obs_y, R, 
-                                r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
-                                min_localisation_level=min_location_level,
-                                precomp_GC=precomp_GC[h],
-                                log=ml_log)
-    
-    MLOceanEnsemble.upload(ML_state)
-
-    # if (MLOceanEnsemble.t % (6*3600) == 0):
     makePlots(MLOceanEnsemble)
     if truth_path == "NEW":
         makeTruePlots(truth)
 
+    ml_log = open(output_path+"/MLlog.txt", 'w')
+    ml_log.write("Eigenvalues of (Sigma_YY+R)\n\n")
+
+    while MLOceanEnsemble.t < T_spinup + T_da:
+        # Forward step
+        MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
+
+        # DA step
+        print("DA at ", MLOceanEnsemble.t)
+        if truth_path == "NEW":
+            truth.dataAssimilationStep(truth.t + da_timestep)
+            true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+        else:
+            true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+
+        ML_state = copy.deepcopy(MLOceanEnsemble.download())
+        
+        ml_log.write("\n DA at " + str(MLOceanEnsemble.t) + "\n")
+        for h, [obs_x, obs_y] in enumerate(zip(obs_xs, obs_ys)):
+            Hx, Hy = MLOceanEnsemble.obsLoc2obsIdx(obs_x, obs_y)
+            obs = [true_eta[Hy,Hx], true_hu[Hy,Hx], true_hv[Hy,Hx]] + np.random.multivariate_normal(np.zeros(3),np.diag(R))
+            
+            ml_log.write("Observation " + str(h) + ":\n")
+            ML_state = MLEnKF.assimilate(ML_state, obs, obs_x, obs_y, R, 
+                                    r=r, obs_var=slice(1,3), relax_factor=relax_factor, 
+                                    min_localisation_level=min_location_level,
+                                    precomp_GC=precomp_GC[h],
+                                    log=ml_log)
+        
+        MLOceanEnsemble.upload(ML_state)
+
+
+        makePlots(MLOceanEnsemble)
+        if truth_path == "NEW":
+            makeTruePlots(truth)
+
+        if MLOceanEnsemble.t % 3600 == 0: 
+            rmses.append(L2norm(MLOceanEnsemble.estimate(np.mean) - [true_eta, true_hu, true_hv]))
+
+    signal.alarm(0)
+
+except Exception as exc:
+    print("DA experiment failed")
+    print(exc)
+    signal.alarm(0)
+    sys.exit(0)
+
+
 # %% 
 # Save last state 
 MLOceanEnsemble.save2file(os.path.join(output_path, "MLstates"))
+
+np.savetxt(output_path+"/rmse.txt", np.array(rmses))
 
 # %%
 # Prepare drifters

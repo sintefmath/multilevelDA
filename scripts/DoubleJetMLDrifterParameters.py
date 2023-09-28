@@ -64,7 +64,7 @@ for l in ls:
 # ### Load Ensemble
 
 # %%
-source_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/MLDA/2023-09-19T14_10_37"
+source_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/MLDA/2023-09-19T14_10_37ls87"
 
 # %%
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
@@ -110,8 +110,7 @@ def loadMLensemble(source_path):
 drifter_ensemble_size = 200
 num_drifters = len(init_positions)
 
-drift_dts = [60, 300, 900, 1800]
-
+drift_dts = [60, 300, 900, 1800, 3600, 3*3600, 6*3600, 12*3600]
 
 for drift_dt in drift_dts: 
     # Prepare ensemble
@@ -122,7 +121,8 @@ for drift_dt in drift_dts:
     while MLOceanEnsemble.t < T_spinup + T_da + T_forecast:
         print(MLOceanEnsemble.t)
         
-        MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + da_timestep)
+        MLOceanEnsemble.stepToObservation(MLOceanEnsemble.t + np.maximum(da_timestep, drift_dt))
         MLOceanEnsemble.registerDrifterPositions()
 
+    os.makedirs(source_path+"/mldrifters_"+str(drift_dt), exist_ok=True)
     MLOceanEnsemble.saveDriftTrajectoriesToFile(source_path+"/mldrifters_"+str(drift_dt), "mldrifters")
