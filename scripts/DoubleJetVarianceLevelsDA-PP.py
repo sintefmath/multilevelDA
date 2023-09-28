@@ -37,7 +37,7 @@ for l in ls:
 # Test
 
 # %%
-source_path = "/cluster/home/floribei/havvarsel/multilevelDA/scripts/VarianceLevelsDA/2023-09-18T16_55_34"
+source_path = "/cluster/home/floribei/havvarsel/multilevelDA/scripts/VarianceLevelsDA/2023-09-25T13_55_37"
 
 # %%
 Ts = [3*24*3600, 4*24*3600, 5*24*3600, 6*24*3600, 7*24*3600, 8*24*3600, 9*24*3600, 10*24*3600]
@@ -104,6 +104,20 @@ def Enorm(field, lvl_grid_args):
     # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
     return np.mean(field, axis=(1,2))
 
+def LInfnorm(field, lvl_grid_args):
+    """
+    integral_D(f dx)
+    where D are uniform finite volumes
+
+    Input:
+    field           - ndarray of shape (3,ny,nx,..)
+    lvl_grid_args   - dict with nx, ny and dx, dy information
+
+    Output:
+    L2norm          - ndarray of shape (3,...)
+    """
+    # assert field.shape[1:3] == (lvl_grid_args["ny"], lvl_grid_args["nx"]), "field has wrong resolution"
+    return np.max(field, axis=(1,2))
 
 norm = L2norm
 
@@ -114,6 +128,8 @@ for t_idx, T in enumerate(Ts):
     for l_idx in range(len(ls)):
         fig, axs = imshow3(np.mean(states[t_idx][l_idx], axis=-1))
         plt.savefig(source_path+"/mean_t"+str(T)+"_l"+str(l_idx)+".pdf", bbox_inches="tight")
+        fig, axs = imshow3var(np.std(states[t_idx][l_idx], axis=-1, ddof=1))
+        plt.savefig(source_path+"/std_t"+str(T)+"_l"+str(l_idx)+".pdf", bbox_inches="tight")
     plt.close("all")
 
 
