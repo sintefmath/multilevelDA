@@ -135,8 +135,8 @@ costsPartnered = raw2costsEnsemble(work_path+"/costsPartneredEnsemble.npy")[:-1]
 # The full list of levels aka [6, ..., 9] is included in the depth-collection 
 # %% 
 taus_height = [
-    [11e-2, 8e-2, 6e-2, 4e-2], # 6 7
-    [14e-2, 9e-2, 7e-2, 5e-2]  # 6 7 8 
+    [8e-2, 5.5e-2, 4e-2, 3e-2], # 6 7
+    [9e-2, 6e-2, 4e-2, 3e-2]  # 6 7 8 
 ]
 
 ML_Nes_height= []
@@ -185,7 +185,7 @@ for n, num_levels in enumerate(range(2,4+1)):
 
 
 # %%
-num_SL_shifts = 2 # meaning: SL on coarest level + SL on num_SL_shifts coarser levels
+num_SL_shifts = 3 # meaning: SL on coarest level + SL on num_SL_shifts coarser levels
 
 SL_Nes_shifts = []
 SL_works_shifts = []
@@ -430,7 +430,7 @@ for s in range(num_SL_shifts+1):
 
 # %%
 print("-----------------------------")
-print("Multi level")
+print("Multi level high")
 
 os.makedirs(output_path+"/runningResults", exist_ok=True)
 
@@ -560,7 +560,7 @@ for d in range(len(taus_height)):
 
 # %%
 print("-----------------------------")
-print("Multi level")
+print("Multi level deep")
 
 os.makedirs(output_path+"/runningResults", exist_ok=True)
 
@@ -606,7 +606,7 @@ for d in range(len(taus_depth)):
                 MLlog.write("ML depth " +str(d)+ ", work " +str(tau_idx)+ ", Experiment "+str(n)+"\n")
                 MLlog.close()
 
-                os.system("python BasinKGainConvSingle.py -m ML -ls " + " ".join(str(l) for l in ls[start_l_idx:-1]) + "-Ne " + " ".join(str(Ne) for Ne in ML_Nes))
+                os.system("python BasinKGainConvSingle.py -m ML -ls " + " ".join(str(l) for l in ls[start_l_idx:-1]) + " -Ne " + " ".join(str(Ne) for Ne in ML_Nes))
 
 
                 if os.path.isdir(os.path.join(base_path,"tmpMLGain")):

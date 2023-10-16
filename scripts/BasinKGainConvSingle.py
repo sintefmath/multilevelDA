@@ -68,9 +68,9 @@ SL_level = pargs.SLlevel
 ML_levels = pargs.MLlevels
 
 # %% 
-print("Reducing T_da for debugging purposes!")
+# print("Reducing T_da for debugging purposes!")
 # T_da = 0
-T_da = 1*3600
+# T_da = 1*3600
 
 # %%
 ##############################################
@@ -386,7 +386,7 @@ elif mode == "MC":
     # Initialisation
     data_args_list = []
     for l_idx in range(len(args_list)): #TODO: Check indices 
-        data_args_list.append( make_init_steady_state(args_list, a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
+        data_args_list.append( make_init_steady_state(args_list[l_idx], a=steady_state_bump_a, bump_fractal_dist=steady_state_bump_fractal_dist) )
 
     from gpuocean.ensembles import MultiLevelOceanEnsemble
     MLOceanEnsemble = MultiLevelOceanEnsemble.MultiLevelOceanEnsembleCase(Nes, args_list, data_args_list, sample_args, make_sim,
