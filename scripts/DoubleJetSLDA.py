@@ -77,7 +77,7 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-26T14_05_06"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-10-26T09_05_51"
 
 # %% 
 # Flags for model error
@@ -187,15 +187,6 @@ SL_ensemble = initSLensemble(Ne, doubleJetCase_args, doubleJetCase_init, sim_mod
 
 
 # %%
-##########################
-# Spin up period
-
-if truth_path=="NEW":
-    truth.dataAssimilationStep(T_spinup)
-SLstepToObservation(SL_ensemble, T_spinup)
-makePlots()
-
-# %%
 if localisation:
     localisation_weights_list = []
     for obs_x, obs_y in zip(obs_xs, obs_ys):
@@ -207,6 +198,23 @@ def L2norm(fields):
     return np.sqrt(np.sum((fields)**2 * truth.dx*truth.dy, axis=(1,2)))
 
 rmses = []
+
+# %%
+##########################
+# Spin up period
+while SL_ensemble[0].t < T_spinup:
+    SLstepToObservation(SL_ensemble, np.minimum(SL_ensemble[0].t + 3600, T_spinup))
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(truth.t + 3600)
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+    else:
+        true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
+    
+    rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
+
+makePlots()
+if truth_path == "NEW":
+    makeTruePlots(truth)
 
 # %% 
 #########################
@@ -307,6 +315,12 @@ while SL_ensemble[0].t < T_spinup + T_da + T_forecast:
     # write2file(int(SL_ensemble[0].t), "")
     if SL_ensemble[0].t % 3600 < 0.1:
         makePlots()
+        if truth_path == "NEW":
+            true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+        else:
+            true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
+
+        rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
 
 # Saving results
 drifter_folder = os.path.join(output_path, 'sldrifters')

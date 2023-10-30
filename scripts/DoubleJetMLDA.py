@@ -96,7 +96,7 @@ for l in ls:
 
 
 # %% 
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-09-26T14_05_06"
+truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-10-26T09_05_51"
 
 
 # %% [markdown] 
@@ -214,26 +214,34 @@ precomp_GC = []
 for obs_x, obs_y in zip(obs_xs, obs_ys):
     precomp_GC.append( MLEnKF.GCweights(obs_x, obs_y, r) )
 
-# Spin up period
-if truth_path=="NEW":
-    truth.dataAssimilationStep(T_spinup)
-MLOceanEnsemble.stepToObservation(T_spinup)
-
 # %% 
-# DA recording 
-def L2norm(fields):
-    return np.sqrt(np.sum((fields)**2 * args_list[-1]["dx"]*args_list[-1]["dy"], axis=(1,2)))
+from gpuocean.utils import MultiLevelScore
+MLscore_prior = MultiLevelScore.MultiLevelScore(args_list)
+MLscore_posterior = MultiLevelScore.MultiLevelScore(args_list)
 
-rmses = []
+# %%
+##########################
+# Spin up period
+while MLOceanEnsemble.t < T_spinup:
+    MLOceanEnsemble.stepToObservation(np.minimum(MLOceanEnsemble.t + da_timestep, T_spinup))
+
+    if truth_path == "NEW":
+        truth.dataAssimilationStep(truth.t + da_timestep)
+        MLscore_prior.assess(MLOceanEnsemble, truth)
+        MLscore_posterior.assess(MLOceanEnsemble, truth)
+    else:
+        MLscore_prior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+        MLscore_posterior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+    
+makePlots(MLOceanEnsemble)
+if truth_path == "NEW":
+    makeTruePlots(truth)
 
 # %% 
 # DA period
 try:
     signal.alarm(6*3600)
 
-    makePlots(MLOceanEnsemble)
-    if truth_path == "NEW":
-        makeTruePlots(truth)
 
     ml_log = open(output_path+"/MLlog.txt", 'w')
     ml_log.write("Eigenvalues of (Sigma_YY+R)\n\n")
@@ -247,8 +255,10 @@ try:
         if truth_path == "NEW":
             truth.dataAssimilationStep(truth.t + da_timestep)
             true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+            MLscore_prior.assess(MLOceanEnsemble, truth)
         else:
             true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+            MLscore_prior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
         ML_state = copy.deepcopy(MLOceanEnsemble.download())
         
@@ -270,9 +280,9 @@ try:
         makePlots(MLOceanEnsemble)
         if truth_path == "NEW":
             makeTruePlots(truth)
-
-        if MLOceanEnsemble.t % 3600 == 0: 
-            rmses.append(L2norm(MLOceanEnsemble.estimate(np.mean) - [true_eta, true_hu, true_hv]))
+            MLscore_posterior.assess(MLOceanEnsemble, truth)
+        else:
+            MLscore_posterior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
     signal.alarm(0)
 
@@ -287,7 +297,6 @@ except Exception as exc:
 # Save last state 
 MLOceanEnsemble.save2file(os.path.join(output_path, "MLstates"))
 
-np.savetxt(output_path+"/rmse.txt", np.array(rmses))
 
 # %%
 # Prepare drifters
@@ -328,9 +337,16 @@ while MLOceanEnsemble.t < T_spinup + T_da + T_forecast:
     if truth_path == "NEW":
         truth.dataAssimilationStep(MLOceanEnsemble.t)
         true_trajectories.add_observation_from_sim(truth)
+        MLscore_prior.assess(MLOceanEnsemble, truth)
+        MLscore_posterior.assess(MLOceanEnsemble, truth)
+    else:
+        MLscore_prior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
+        MLscore_posterior.assess(MLOceanEnsemble, truth_path+"/truth_"+str(int(MLOceanEnsemble.t))+".npy")
 
     if MLOceanEnsemble.t%3600 < 0.1:
         makePlots(MLOceanEnsemble)
+        if truth_path == "NEW":
+            makeTruePlots(truth)
 
 # Save results
 drifter_folder = os.path.join(output_path, 'mldrifters')
@@ -339,3 +355,6 @@ MLOceanEnsemble.saveDriftTrajectoriesToFile(drifter_folder, "mldrifters")
 
 if truth_path == "NEW":
     true_trajectories.to_pickle(os.path.join(drifter_folder,"true_drifters"))
+
+MLscore_prior.save2file(output_path, "_prior")
+MLscore_posterior.save2file(output_path, "_posterior")

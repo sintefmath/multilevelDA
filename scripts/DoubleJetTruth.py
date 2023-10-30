@@ -108,8 +108,9 @@ truth.model_time_step = sim_model_error_timestep
 
 # %% 
 # Spin-up
-truth.dataAssimilationStep(T_spinup)
-write2file(int(truth.t))
+while truth.t < T_spinup:
+    truth.dataAssimilationStep(truth.t + da_timestep)
+    write2file(int(truth.t))
 
 # %% 
 # DA period
@@ -149,7 +150,7 @@ forecast.add_observation_from_sim(truth)
 # %% 
 while truth.t < T_spinup + T_da + T_forecast:
     # Forward step
-    truth.dataAssimilationStep(truth.t+300)
+    truth.dataAssimilationStep(truth.t+da_timestep)
     forecast.add_observation_from_sim(truth)
 
     # DA step
