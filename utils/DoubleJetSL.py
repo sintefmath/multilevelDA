@@ -60,9 +60,9 @@ def SLupload(SL_ensemble, SL_state):
         SL_ensemble[e].upload(*np.pad(SL_state[:,:,:,e], ((0,0),(2,2),(2,2))))
 
 
-def SLestimate(SL_ensemble, func):
+def SLestimate(SL_ensemble, func, **kwargs):
     SL_state = SLdownload(SL_ensemble)
-    return func(SL_state, axis=-1)
+    return func(SL_state, axis=-1, **kwargs)
 
 
 def GCweights(SL_ensemble, obs_x, obs_y, r):

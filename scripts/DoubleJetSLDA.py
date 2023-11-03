@@ -197,19 +197,21 @@ if localisation:
 def L2norm(fields):
     return np.sqrt(np.sum((fields)**2 * truth.dx*truth.dy, axis=(1,2)))
 
+stddevs = []
 rmses = []
 
 # %%
 ##########################
 # Spin up period
 while SL_ensemble[0].t < T_spinup:
-    SLstepToObservation(SL_ensemble, np.minimum(SL_ensemble[0].t + 3600, T_spinup))
+    SLstepToObservation(SL_ensemble, np.minimum(SL_ensemble[0].t + da_timestep, T_spinup))
     if truth_path == "NEW":
         truth.dataAssimilationStep(truth.t + 3600)
         true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
     else:
         true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
     
+    stddevs.append(L2norm(SLestimate(SL_ensemble, np.std, ddof=1).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2)))
     rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
 
 makePlots()
@@ -246,14 +248,14 @@ while SL_ensemble[0].t < T_spinup + T_da:
         
     SLupload(SL_ensemble, SL_state)
 
+    stddevs.append(L2norm(SLestimate(SL_ensemble, np.std, ddof=1).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2)))
+    rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
 
     makePlots()
     if truth_path == "NEW":
         makeTruePlots(truth)
 
-    if SL_ensemble[0].t % 3600 == 0: 
-        rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
-
+    
 # %% 
 # Save last state
 write2file(SL_ensemble) 
@@ -312,15 +314,15 @@ while SL_ensemble[0].t < T_spinup + T_da + T_forecast:
         truth.dataAssimilationStep(SL_ensemble[0].t)
         true_trajectories.add_observation_from_sim(truth)
 
-    # write2file(int(SL_ensemble[0].t), "")
-    if SL_ensemble[0].t % 3600 < 0.1:
-        makePlots()
-        if truth_path == "NEW":
-            true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
-        else:
-            true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
 
-        rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
+    makePlots()
+    if truth_path == "NEW":
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+    else:
+        true_eta, true_hu, true_hv = np.load(truth_path+"/truth_"+str(int(SL_ensemble[0].t))+".npy")
+
+    stddevs.append(L2norm(SLestimate(SL_ensemble, np.std, ddof=1).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2)))
+    rmses.append(L2norm(SLestimate(SL_ensemble, np.mean).repeat(2**scale2truth_factor,1).repeat(2**scale2truth_factor,2) - [true_eta, true_hu, true_hv]))
 
 # Saving results
 drifter_folder = os.path.join(output_path, 'sldrifters')
@@ -332,4 +334,5 @@ if truth_path == "NEW":
 for e in range(len(SL_ensemble)):
     forecasts[e].to_pickle(os.path.join(drifter_folder,"sldrifters_"+str(e).zfill(4)+".pickle"))
 
-
+np.save(output_path+"/stddev.npy", np.array(stddevs))
+np.save(output_path+"/rmse.npy", np.array(rmses))
