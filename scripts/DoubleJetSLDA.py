@@ -21,7 +21,7 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/SLDA/"+timestamp 
+output_path = os.path.join(os.path.realpath(os.path.dirname(__file__)),"DataAssimilation/DoubleJetSLDA/"+timestamp)
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
@@ -32,7 +32,7 @@ import git
 gpuocean_repo = git.Repo(gpuocean_path)
 log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
 
-repo = git.Repo(search_parent_directories=True)
+repo = git.Repo(os.path.realpath(os.path.dirname(__file__)), search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
 
 import shutil
@@ -46,7 +46,7 @@ from gpuocean.utils import Common
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.realpath(os.path.dirname(__file__)), '../')))
 from utils.DoubleJetPlot import *
 from utils.DoubleJetSL import *
 # %%
@@ -60,7 +60,7 @@ gpu_stream = cuda.Stream()
 # %% 
 import argparse
 parser = argparse.ArgumentParser(description='Ensemble inputs')
-parser.add_argument("-L", "--level", required=True, type=int, default=8)
+parser.add_argument("-L", "--level", required=True, type=int, default=9)
 parser.add_argument("-Ne", "--ensembleSize", required=True, type=int, default=50)
 
 pargs = parser.parse_args()
@@ -77,7 +77,7 @@ doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPert
 doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
 
 # %%
-truth_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetTruth/2023-10-26T09_05_51"
+truth_path = "/cluster/home/floribei/havvarsel/multilevelDA/scripts/DataAssimilation/DoubleJetTruth/2023-10-30T13_00_13"
 
 # %% 
 # Flags for model error

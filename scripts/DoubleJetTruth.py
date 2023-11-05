@@ -20,7 +20,7 @@ import pycuda.driver as cuda
 import datetime
 timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-output_path = "DataAssimilation/DoubleJetTruth/"+timestamp 
+output_path = os.path.join(os.path.realpath(os.path.dirname(__file__)),"DataAssimilation/DoubleJetTruth/"+timestamp)
 os.makedirs(output_path)
 
 log = open(output_path+"/log.txt", 'w')
@@ -31,7 +31,7 @@ import git
 gpuocean_repo = git.Repo(gpuocean_path)
 log.write("GPUOcean code from: " + str(gpuocean_repo.head.object.hexsha) + " on branch " + str(gpuocean_repo.active_branch.name) + "\n")
 
-repo = git.Repo(search_parent_directories=True)
+repo = git.Repo(os.path.realpath(os.path.dirname(__file__)), search_parent_directories=True)
 log.write("Current repo >>"+str(repo.working_tree_dir.split("/")[-1])+"<< with " +str(repo.head.object.hexsha)+ "on branch " + str(repo.active_branch.name) + "\n\n")
 
 import shutil
@@ -45,7 +45,7 @@ from gpuocean.utils import Common
 from gpuocean.SWEsimulators import CDKLM16, ModelErrorKL
 
 # %% 
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.realpath(os.path.dirname(__file__)), '../')))
 from utils.DoubleJetPlot import *
 
 # %%
@@ -57,7 +57,7 @@ gpu_stream = cuda.Stream()
 # ## Setting-up case with different resolutions
 
 # %% 
-L = 8
+L = 9
 
 # %% 
 from utils.DoubleJetParametersReplication import *
