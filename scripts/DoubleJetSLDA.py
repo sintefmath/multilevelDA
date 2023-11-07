@@ -260,7 +260,6 @@ while SL_ensemble[0].t < T_spinup + T_da:
 # Save last state
 write2file(SL_ensemble) 
 
-np.savetxt(output_path+"/rmse.txt", np.array(rmses))
 
 # %% 
 # Prepare drifters
