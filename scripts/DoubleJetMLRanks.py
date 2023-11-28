@@ -77,7 +77,7 @@ Ne = [88, 37, 12]
 log.write("levels = " + ", ".join([str(l) for l in ls])+"\n\n")
 log.write("ML_Nes = " + ",".join([str(ne) for ne in Ne])+"\n")
 log.write("T (spinup) = " + str(T_spinup) +"\n")
-
+log.close()
 
 # %% 
 ########################################
@@ -87,9 +87,9 @@ while n < 1000:
     print("Experiment ", n)
 
     try:
-        signal.alarm(15*60)
+        signal.alarm(3*60*60)
 
-        os.system("python "+script_path+"/DoubleJetMLDA4ranks.py -ls "+ " ".join(str(l) for l in ls) + " -Ne "+ " ".join(str(ne) for ne in Ne) + " --timestamp " + timestamp + " -n " + str(n) )
+        os.system("python "+script_path+"/DoubleJetMLDA4Ranks.py -ls "+ " ".join(str(l) for l in ls) + " -Ne "+ " ".join(str(ne) for ne in Ne) + " --timestamp " + timestamp + " -n " + str(n) )
 
         signal.alarm(0)
         n=n+1
