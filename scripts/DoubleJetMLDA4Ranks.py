@@ -122,7 +122,7 @@ for r_idx in range(1, len(rank_obs_xs)):
 
 
 # %% 
-def write2file(MLOceanEnsemble):
+def write2file(MLOceanEnsemble, truth):
     """
     File location: RankHistograms/<timestamp>/<exp_n>_***
 
@@ -142,6 +142,9 @@ def write2file(MLOceanEnsemble):
         np.save(t_path+"/"+exp_n+"_MLvalues_"+str(l_idx)+"_0.npy", np.array(ML_state[l_idx][0][:,rank_idxs[l_idx][0][0],rank_idxs[l_idx][0][1]]))
         np.save(t_path+"/"+exp_n+"_MLvalues_"+str(l_idx)+"_1.npy", np.array(ML_state[l_idx][1][:,rank_idxs[l_idx][1][0],rank_idxs[l_idx][1][1]]))
 
+    true_state = np.array(truth.download(interior_domain_only=True))
+    np.save(t_path+"/"+exp_n+"_TRUEvalues.npy", true_state[:,rank_idxs[-1][0][0],rank_idxs[-1][0][1]])
+
 
 # %%
 from gpuocean.dataassimilation import MLEnKFOcean
@@ -159,7 +162,7 @@ MLOceanEnsemble.stepToObservation(T_spinup)
     
 # %% 
 # DA period
-write2file(MLOceanEnsemble)
+write2file(MLOceanEnsemble, truth)
 
 Ts = [3600, 6*3600, 12*3600, 24*3600]
 
@@ -187,10 +190,10 @@ for t_idx in range(len(Ts)):
         
         MLOceanEnsemble.upload(ML_state)
 
-    write2file(MLOceanEnsemble)
+    write2file(MLOceanEnsemble, truth)
 
 
 MLOceanEnsemble.stepToObservation( T_spinup + Ts[-1] + 3*3600 )
 truth.dataAssimilationStep( MLOceanEnsemble.t )
 
-write2file(MLOceanEnsemble)
+write2file(MLOceanEnsemble, truth)

@@ -11,12 +11,6 @@ import copy
 import pycuda.driver as cuda
 from matplotlib import pyplot as plt
 
-plt.rcParams["lines.color"] = "w"
-plt.rcParams["text.color"] = "w"
-plt.rcParams["axes.labelcolor"] = "w"
-plt.rcParams["xtick.color"] = "w"
-plt.rcParams["ytick.color"] = "w"
-
 plt.rcParams["image.origin"] = "lower"
 
 
@@ -29,44 +23,14 @@ import sys, os
 
 
 # %% [markdown]
-# Get initial arguments from class
-
-# %%
-from gpuocean.utils import DoubleJetCase
-
-# %%
-doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=256, nx=512)
-doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
-
-# %% [markdown]
-# ## Truth
-
-# %% [markdown]
-# ## Ensemble drifter
-
-# %%
-ls = [7, 8]
-
-# %%
-from gpuocean.utils import DoubleJetCase
-
-args_list = []
-init_list = []
-
-for l in ls:
-    doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=2**l, nx=2**(l+1))
-    doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
-
-    args_list.append(doubleJetCase_args)
-    init_list.append(doubleJetCase_init)
-
-# %% [markdown]
 # ### Load Ensemble
 
 # %%
-source_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/MLDA/2023-09-19T14_10_37ls87"
+source_path = "/home/florianb/havvarsel/multilevelDA/doublejet/scripts/DataAssimilation/DoubleJetMLDA/2023-11-09T18_07_14"
 
 # %%
+from gpuocean.utils import DoubleJetCase
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '../')))
 from utils.DoubleJetParametersReplication import *
 from utils.DoubleJetEnsembleInit import *
@@ -74,14 +38,30 @@ from utils.DoubleJetEnsembleInit import *
 from gpuocean.ensembles import MultiLevelOceanEnsemble
 
 def loadMLensemble(source_path):
+    l_max = int((len(os.listdir(source_path+"/MLstates"))-1)/2)+1
+
     ML_state = []
     ML_state.append(np.load(source_path+"/MLstates/MLensemble_0.npy"))
-    for l_idx in range(1, len(ls)):
+    for l_idx in range(1, l_max):
         ML_state.append( [np.load(source_path+"/MLstates/MLensemble_"+str(l_idx)+"_0.npy"), np.load(source_path+"/MLstates/MLensemble_"+str(l_idx)+"_1.npy")] )
+
+    args_list = []
+    init_list = []
+
+    for l_idx in range(l_max):
+        if l_idx == 0: 
+            ny, nx = ML_state[l_idx].shape[1:3]
+        else:
+            ny, nx = ML_state[l_idx][0].shape[1:3]
+        doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx, DoubleJetCase.DoubleJetPerturbationType.SteadyState, ny=ny, nx=nx)
+        doubleJetCase_args, doubleJetCase_init, _ = doubleJetCase.getInitConditions()
+
+        args_list.append(doubleJetCase_args)
+        init_list.append(doubleJetCase_init)
 
     ML_Ne = []
     ML_Ne.append(ML_state[0].shape[-1])
-    for l_idx in range(1, len(ls)):
+    for l_idx in range(1, l_max):
         ML_Ne.append(ML_state[l_idx][0].shape[-1])
 
     ML_ensemble = initMLensemble(ML_Ne, args_list, init_list,
@@ -92,12 +72,13 @@ def loadMLensemble(source_path):
     MLOceanEnsemble.upload(ML_state)
 
     for e in range(ML_Ne[0]):
-        MLOceanEnsemble.ML_ensemble[0][e].t = T_spinup + T_da
+        MLOceanEnsemble.ML_ensemble[0][e].t = np.float32(T_spinup + T_da)
 
-    for l_idx in range(1, len(ls)):
+    for l_idx in range(1, l_max):
         for e in range(ML_Ne[l_idx]):
-            MLOceanEnsemble.ML_ensemble[l_idx][0][e].t = T_spinup + T_da
-            MLOceanEnsemble.ML_ensemble[l_idx][1][e].t = T_spinup + T_da
+            MLOceanEnsemble.ML_ensemble[l_idx][0][e].t = np.float32(T_spinup + T_da)
+            MLOceanEnsemble.ML_ensemble[l_idx][1][e].t = np.float32(T_spinup + T_da)
+    MLOceanEnsemble.t = np.float32(T_spinup + T_da)
 
     return MLOceanEnsemble
 
@@ -107,10 +88,10 @@ def loadMLensemble(source_path):
 
 # %%
 # Prepare drifters
-drifter_ensemble_size = 200
+drifter_ensemble_size = 250
 num_drifters = len(init_positions)
 
-drift_dts = [60, 300, 900, 1800, 3600, 3*3600, 6*3600, 12*3600]
+drift_dts = [60]#, 300, 900, 1800, 3600, 3*3600, 6*3600, 12*3600]
 
 for drift_dt in drift_dts: 
     # Prepare ensemble
