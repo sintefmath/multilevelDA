@@ -96,7 +96,7 @@ for l in ls:
 
 
 # %% 
-truth_path = "/cluster/home/floribei/havvarsel/multilevelDA/scripts/DataAssimilation/DoubleJetTruth/2023-10-30T13_00_13"
+truth_path = "/cluster/home/floribei/havvarsel/multilevelDA/scripts/DataAssimilation/DoubleJetTruth/2023-11-02T09_33_29"
 
 # %% [markdown] 
 # ## Ensemble
