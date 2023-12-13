@@ -90,7 +90,7 @@ for l in ls:
 T_spinup = 3*24*3600
 T_test = 10*24*3600
 
-N_test = 25
+N_test = 5
 
 # %%
 # Book keeping
@@ -130,6 +130,40 @@ for l_idx in range(len(ls)):
         sim = CDKLM16.CDKLM16(**args_list[l_idx], **init_list[l_idx])
         sim.updateDt()
 
+        sim.step(T_spinup)
+
+        gpu_ctx.synchronize()
+        tic = time.time()
+
+        sim.step(T_spinup + T_test)
+
+        gpu_ctx.synchronize()
+        toc = time.time()
+
+        costsPure[l_idx, n] = toc-tic
+
+        sim.cleanUp()
+
+np.savetxt(output_path+"/runtimes_GPUOcean.txt", np.mean(costsPure, axis=-1))
+
+# %% [markdown]
+## PLAIN SIMULATIONS PER LEVEL
+
+# %% 
+costsPure = np.zeros((len(ls), N_test))
+
+# %% 
+for l_idx in range(len(ls)):
+    print("Level ", l_idx)
+
+    for n in range(N_test):
+        print(l_idx, n)
+
+        sim = CDKLM16.CDKLM16(**args_list[l_idx], **init_list[l_idx])
+        sim.updateDt()
+        sim.setKLModelError(**sim_model_error_basis_args)
+        sim.model_time_step = sim_model_error_timestep
+
         sim.dataAssimilationStep(T_spinup)
 
         gpu_ctx.synchronize()
@@ -144,40 +178,7 @@ for l_idx in range(len(ls)):
 
         sim.cleanUp()
 
-np.savetxt(output_path+"/costs_deterministic.txt", np.mean(costsPure, axis=-1))
-# # %% [markdown]
-# ## PLAIN SIMULATIONS PER LEVEL
-
-# # %% 
-# costsPure = np.zeros((len(ls), N_test))
-
-# # %% 
-# for l_idx in range(len(ls)):
-#     print("Level ", l_idx)
-
-#     for n in range(N_test):
-#         print(l_idx, n)
-
-#         sim = CDKLM16.CDKLM16(**args_list[l_idx], **init_list[l_idx])
-#         sim.updateDt()
-#         sim.setKLModelError(**sim_model_error_basis_args)
-#         sim.model_time_step = sim_model_error_timestep
-
-#         sim.dataAssimilationStep(T_spinup)
-
-#         gpu_ctx.synchronize()
-#         tic = time.time()
-
-#         sim.dataAssimilationStep(T_spinup + T_test)
-
-#         gpu_ctx.synchronize()
-#         toc = time.time()
-
-#         costsPure[l_idx, n] = toc-tic
-
-#         sim.cleanUp()
-
-# np.savetxt(output_path+"/costs.txt", np.mean(costsPure, axis=-1))
+np.savetxt(output_path+"/runtimes_GPUOcean_perturbed.txt", np.mean(costsPure, axis=-1))
 
 # # %% [markdown]
 # ## SIMULATIONS WITH PARTNERS PER LEVEL
