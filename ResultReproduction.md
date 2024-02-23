@@ -13,30 +13,35 @@ However, the results are stochastic and the exact results may differ with statis
 
 - Figure 4: `notebooks/DoubleJet-Resoltions4paper.ipynb` (results are seeded)
 
-- Figure 5: tikz + requires running `scripts/DoubleJetVarianceLevel-DA.py` + `scripts/DoubleJetVarianceLevel-DA-PP.py` (with right `source_path` to the output folder of the preceding script and with different functionals in the code for a- and b-plot, see comments in the code) 
+- Figure 5: tikz + requires running `scripts/DoubleJetVarianceLevel-DA.py` + `scripts/DoubleJetVarianceLevel-DA-PP.py`
+(The first script save results in a newly created putput folder. The second script requries to set `source_path` to the output folder of the first script. Moreover, for different functionals, follow the instructions in the second script to create the a- and b-plot. Also the second script saves results in a newly created output folder.) 
 
-- Table 1: `notebooks/DoubleJet-SpeedUp.ipynb` (with the corresponding output folders of practical costs and variances)
+- Table 1: `notebooks/DoubleJet-SpeedUp.ipynb` (requires to set the output folders of the previous cost and variance experiments are manual inputs)
 
-> The next figures require running 
+> The next figures require running
+> - `scripts/DoubleJetSLDA.py -L 9` 
+>
+> Then set the output folder of this script as `truth_path` in the following scripts
+>
 > - `scripts/DoubleJetSLDA.py -L 9 -Ne 50`, and 
 > - e.g. `scripts/DoubleJetMLDA.py -ls 6 7 8 9 -Nes 275 134 46 13` 
 >
-> (with right `truth_path` for the output of the truth) 
+> Again, output folders are created and those folders paths have to be manually set in the following notebooks!
 
-- Figure 6: `notebooks/DoubleJet-DA-PostProcessing-ERR4paper.ipynb` (with right output folders as input)
+- Figure 6: `notebooks/DoubleJet-DA-PostProcessing-ERR4paper.ipynb` (set folder path as explained above)
 
-- Figure 7: `notebooks/DoubleJet-DA-PostProcessing-ERRloc4paper.ipynb` (with right output folders as input) + requires running `scripts/DoubleJetMLDA.py -ls 6 7 8 9 -Nes 275 134 46 13` (with right `truth_path` for the output of the truth AND `min_localisation_level=1` see comment in the upper part of the script)
+- Figure 7: `notebooks/DoubleJet-DA-PostProcessing-ERRloc4paper.ipynb` (set folder path as explained above) + requires running `scripts/DoubleJetMLDA.py -ls 6 7 8 9 -Nes 275 134 46 13` (with right `truth_path` for the output of the truth AND `min_localisation_level=1` see comment in the upper part of the script)
 
-- Figure 8: `notebooks/DoubleJet-MLDA-PostProcessing-MLscores4paper.ipynb` (with right output folders as input) 
+- Figure 8: `notebooks/DoubleJet-MLDA-PostProcessing-MLscores4paper.ipynb` (set folder path as explained above)
 
-- Figure 9: `notebooks/DoubleJet-MLRanks-PostProcessing4paper.ipynb` (with right output folders as input)  + requires running `scripts/DoubleJetMLRanks.py`
+- Figure 9: `notebooks/DoubleJet-MLRanks-PostProcessing4paper.ipynb` (set folder path as explained above)  + requires running `scripts/DoubleJetMLRanks.py`
 
-- Figure 10: `notebooks/DoubleJet-DA-PostProcessing-Drifter4paper.ipynb` (with right output folders as input) 
+- Figure 10: `notebooks/DoubleJet-DA-PostProcessing-Drifter4paper.ipynb` (set folder path as explained above)
 
-- Figure 11: `notebooks/DoubleJet-DA-PostProcessing-DrifterERR4paper.ipynb` (with right output folders as input) 
+- Figure 11: `notebooks/DoubleJet-DA-PostProcessing-DrifterERR4paper.ipynb` (set folder path as explained above)
 
-- Figure 12: `notebooks/DoubleJet-DA-PostProcessing-DrifterKDE4paper.ipynb` (with right output folders as input) 
+- Figure 12: `notebooks/DoubleJet-DA-PostProcessing-DrifterKDE4paper.ipynb` (set folder path as explained above) 
 
-- Table 2: `notebooks/DoubleJet-DA-PostProcessing-DrifterKDE4paper.ipynb` (with right output folders as input, see far down in the notebook) 
+- Table 2: `notebooks/DoubleJet-DA-PostProcessing-DrifterKDE4paper.ipynb` (set folder path as explained above, see far down in the notebook) 
 
 A lot of parameters are collected in `utils/DoubleJetParametersReproduction.py`. 
