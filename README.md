@@ -3,7 +3,7 @@ This repository contains code, scripts and notebooks related to the work present
 The motivation is to setup multi-level Monte Carlo ensembles of simplified ocean models and evaluate the usability of multi-level data assimilating in the presence of sparse observations of ocean currents.
 We then use the posterior multi-level ensemble to forecast the ocean state and drift trajectories.
 
-All code relies heavily on [GPU Ocean](https://github.com/gpuocean/gpuocean).
+All code relies heavily on [GPU Ocean](https://github.com/gpuocean/gpuocean) v1.3.0.
 
 ## Result Reproduction
 Although the exact figures from the paper will be hard to reproduce due to stochastic processes, the figures can be qualitatively reproduced as follows:
